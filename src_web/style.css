@@ -1,0 +1,107 @@
+/* Основные состояния */
+.is-offline {
+	filter: grayscale(0.5);
+}
+
+/* Эффект "затухания" данных при отсутствии связи */
+.is-offline #bat-container,
+.is-offline .badge,
+.is-offline .progress-bar,
+.is-offline span,
+.is-offline b,
+.is-offline .h5 {
+	color: #adb5bd !important;
+	border-color: #dee2e6 !important;
+}
+
+.is-offline .progress-bar {
+	background-color: #dee2e6 !important;
+}
+
+/* Статус-индикатор (точка в хедере) */
+.status-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	transition: all 0.3s ease;
+	border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Цвета батареи (используем стандартные переменные Bootstrap) */
+#bat-container {
+	transition: color 0.3s ease;
+}
+
+/* График спутников в блоке навигации */
+#sat-chart {
+	background: rgba(0, 0, 0, 0.03);
+	border-radius: 4px;
+	padding: 10px 5px;
+}
+
+.sat-bar-wrapper {
+	height: 100%;
+}
+
+/* Настройка вертикального прогресс-бара */
+#sat-chart .progress {
+	display: flex;
+	flex-direction: column-reverse; /* Растет снизу вверх */
+	background-color: rgba(0, 0, 0, 0.05);
+	border-radius: 2px;
+}
+
+/* Таблицы */
+.table-responsive {
+	scrollbar-width: thin;
+	border-radius: 0 0 4px 4px;
+}
+
+/* Фиксация заголовков таблиц при скролле */
+.sticky-top {
+	top: -1px;
+	z-index: 10;
+}
+
+#log-table thead th,
+#wifi-table thead th {
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+#log-table thead th:hover,
+#wifi-table thead th:hover {
+	background-color: #f1f1f1;
+}
+
+/* Модальное окно */
+.modal-header .btn {
+	opacity: 1; /* Кнопки Reboot/Off всегда яркие */
+}
+
+.form-switch .form-check-input {
+	cursor: pointer;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 576px) {
+	.navbar-brand {
+		font-size: 1rem;
+	}
+
+	#bat-container {
+		font-size: 0.9rem;
+	}
+
+	.card-header {
+		font-size: 0.9rem;
+	}
+}
+
+/* Плавный переход цвета для батарейки */
+.transition-color {
+	transition: color 0.5s ease-in-out;
+}

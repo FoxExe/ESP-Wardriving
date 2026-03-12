@@ -5,6 +5,9 @@
 
 #include "Logger.h"
 
+#define WS_TYPE_STATS 0x01
+#define WS_TYPE_WIFI 0x02
+
 
 class WebServer {
 private:
@@ -17,10 +20,10 @@ private:
 			data[len] = 0;
 			String msg = (char*)data;
 
-			if (msg == "toggle") {
-				digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-				_ws.textAll("Status: Changed");
-			}
+			//if (msg == "toggle") {
+			//	digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+			//	_ws.textAll("Status: Changed");
+			//}
 		}
 	}
 
@@ -110,22 +113,36 @@ public:
 
 		_server.on("/GetUsedBlocks", HTTP_GET, [this](AsyncWebServerRequest* request) {
 			AsyncResponseStream* response = request->beginResponseStream("text/plain");
-			bool first = true;
-			logger.getUsedBlockIDs([response, &first](int id) {
-				if (!first) {
+
+			// Контекст для отслеживания первой записи (чтобы не ставить лишнюю запятую)
+			auto first = std::make_shared<bool>(true);
+
+			logger.getUsedBlockIDs([response, first](int id, uint32_t timestamp) {
+				if (!(*first)) {
 					response->print(",");
 				}
-				response->print(id);
-				first = false;
+				// Формат: ID=Timestamp
+				response->printf("%u=%u", id, timestamp);
+				*first = false;
 				});
+
 			request->send(response);
+			});
+
+		_server.on("/DeleteAll", HTTP_POST, [this](AsyncWebServerRequest* request) {
+			logger.requestErase();
+			request->send(200, "text/plain", "OK");
 			});
 
 		_server.begin();
 	}
 
+	void sendWSData(uint8_t* buf, uint32_t len) {
+		_ws.binaryAll(buf, len);
+	}
+
 	void end() {
-		_ws.closeAll(); // Если используете AsyncWebSocket
+		_ws.closeAll();
 		_server.end();
 	}
 

@@ -8,7 +8,7 @@
 #define TURNOFF_THRESHOLD 1  // turn off at this percent
 #define BATT_DIVIDER_K 5.5
 #define BATT_REF_V 1.0
-#define ADC_MAX 1024.0
+#define ADC_MAX 1023.0
 #define BATT_SMOOTH 0.02
 
 class Battery {
@@ -19,7 +19,7 @@ private:
 
 	struct DischargePoint { float v; int p; };
 	static constexpr int TABLE_SIZE = 12;
-	const DischargePoint _table[TABLE_SIZE] = {
+	static constexpr DischargePoint _table[TABLE_SIZE] = {
 		{4.20, 100},
 		{4.10, 96},
 		{4.00, 90},
@@ -45,8 +45,9 @@ public:
 	}
 
 	void update() {
+		yield(); // Fix possible Wi-Fi conflicts
 		int raw = analogRead(A0);
-		float instantVoltage = (raw / ADC_MAX) * BATT_REF_V * _k;
+		float instantVoltage = ((float)raw / ADC_MAX) * BATT_REF_V * _k;
 
 		if (_filteredVoltage < 0) _filteredVoltage = instantVoltage;
 		else _filteredVoltage = (_filteredVoltage * (1.0 - BATT_SMOOTH)) + (instantVoltage * BATT_SMOOTH);

@@ -1,0 +1,50 @@
+{
+	"Africa": {
+		"0": ["Casablanca"],
+		"120": ["Cairo"],
+		"180": ["Nairobi"]
+	},
+	"America": {
+		"-480": ["Los_Angeles", "Vancouver"],
+		"-420": ["Denver", "Phoenix"],
+		"-360": ["Chicago", "Mexico_City"],
+		"-300": ["New_York", "Toronto"],
+		"-180": ["Argentina/Buenos_Aires", "Sao_Paulo"]
+	},
+	"Asia": {
+		"180": ["Baghdad"],
+		"210": ["Tehran"],
+		"240": ["Dubai", "Baku", "Tbilisi"],
+		"270": ["Kabul"],
+		"300": ["Yekaterinburg", "Karachi", "Tashkent"],
+		"330": ["Kolkata", "Colombo"],
+		"345": ["Kathmandu"],
+		"360": ["Omsk", "Dhaka", "Almaty"],
+		"390": ["Yangon"],
+		"420": ["Novosibirsk", "Bangkok", "Jakarta"],
+		"480": ["Singapore", "Hong_Kong", "Irkutsk", "Shanghai"],
+		"540": ["Tokyo", "Seoul", "Yakutsk"],
+		"600": ["Vladivostok"],
+		"720": ["Kamchatka"]
+	},
+	"Australia": {
+		"480": ["Perth"],
+		"570": ["Adelaide"],
+		"600": ["Sydney"]
+	},
+	"Europe": {
+		"0": ["London"],
+		"60": ["Berlin", "Paris", "Rome", "Warsaw"],
+		"120": ["Kyiv", "Helsinki", "Jerusalem"],
+		"180": ["Moscow", "Istanbul"],
+		"240": ["Samara"]
+	},
+	"Pacific": {
+		"-600": ["Honolulu"],
+		"720": ["Fiji", "Auckland"],
+		"765": ["Chatham"]
+	},
+	"Etc": {
+		"0": ["UTC"]
+	}
+}

@@ -6,7 +6,7 @@
 // Константы
 #define SPI_CS_PIN            16
 #define DATA_BLOCK_SIZE       (64 * 1024) // !DO NOT CHANGE! (Or change all "_flash.eraseBlock64K()" in code!)
-#define BLOCK_HEADER_MAGIC    0xCE94
+#define BLOCK_HEADER_MAGIC    0xDDCC
 #define MIN_VALID_TS          1704067200UL // 1 Jan 2024
 #define MAX_CACHE_SIZE        1024  // 6 (MAC) + 2(Offset) = 8 bytes per record. 8 * 1024 = 8KB RAM
 
@@ -34,7 +34,7 @@ struct GPS_Position_Info {
 	uint32_t timestamp;
 	float lat;
 	float lon;
-	uint16_t alt;
+	int16_t alt;
 	uint16_t accuracy;
 	uint8_t bat_charge;
 	uint8_t ap_count;
@@ -61,6 +61,7 @@ private:
 	uint32_t _pointsSaved = 0;      // Счетчик за текущий сеанс
 	bool _rotateLogs = true;        // Флаг циклической записи
 	bool _isFull = false;           // Флаг остановки при заполнении
+	bool _requestedErase = false;
 
 	// Внутренние методы
 	uint16_t align4(uint16_t addr) { return (addr + 3) & ~3; }
@@ -79,7 +80,9 @@ public:
 	bool storeRecord(GPS_Position_Info& gps);
 
 	// Поблочное форматирование
-	void formatFlash();
+	void requestErase() { _requestedErase = true; }
+	bool needErase() { return _requestedErase; }
+	void eraseFlash(std::function<void(int)> onProgress);
 
 	// Управление и статистика
 	void setRotation(bool enable) { _rotateLogs = enable; }
@@ -90,7 +93,7 @@ public:
 	uint32_t flashSize() { return _flashSize; }
 	uint32_t pointsSaved() { return _pointsSaved; }
 	uint8_t getUsagePercentage() { return (uint8_t)((blocksUsed() * 100) / blocksTotal()); };
-	void getUsedBlockIDs(std::function<void(int)> onIdFound);
+	void getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound);
 
 	// Метод для AsyncWebServer (чтение блока порциями)
 	bool getBlockPart(uint32_t blockIdx, uint32_t offset, uint8_t* buffer, size_t len);

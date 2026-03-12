@@ -44,7 +44,7 @@ bool Logger::begin() {
 		BlockHeader bh;
 
 		flashReadStruct(_flash, addr, &bh);
-		Serial.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
+		//Serial.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
 		if (bh.magic != BLOCK_HEADER_MAGIC) {
 			continue;
 		}
@@ -56,7 +56,7 @@ bool Logger::begin() {
 			// DEBUG: Dump first bytes
 			uint8_t buff[32];
 			_flash.readByteArray(addr, buff, 32);
-			Serial.printf("> FOUND DATA:");
+			//Serial.print(F("> FOUND DATA:"));
 			for (uint8_t i = 0; i < 32; i++) {
 				Serial.printf(" %02X", buff[i]);
 			}
@@ -213,14 +213,17 @@ uint16_t Logger::getOffsetFromCache(uint8_t* mac) {
 	return 0;
 }
 
-void Logger::formatFlash() {
-	uint32_t nextBlockID = _currentBlockAddr / DATA_BLOCK_SIZE;
-	if (nextBlockID >= blocksTotal()) { nextBlockID = 0; }
+void Logger::eraseFlash(std::function<void(int)> onProgress) {
+	uint32_t total = blocksTotal();
+	uint32_t nextBlockID = ((_currentBlockAddr / DATA_BLOCK_SIZE) + 1) % total;
 
-	for (uint32_t i = 0; i < blocksTotal(); i++) {
+	for (uint32_t i = 0; i < total; i++) {
+		int percent = (i * 100) / total;
+		if (onProgress) onProgress(percent);
+
 		if (i == nextBlockID) { continue; } // Skip next block (will format it later)
 		_flash.eraseBlock64K(i * DATA_BLOCK_SIZE);
-		yield();
+		delay(1);
 	}
 
 	_isFull = false;
@@ -231,6 +234,10 @@ void Logger::formatFlash() {
 	_rotateLogs = true; // Hack - we need format next block in any way!
 	prepareNextBlock();
 	_rotateLogs = oldState;
+
+	Serial.println(F("FLASH ERASED."));
+
+	_requestedErase = false;
 }
 
 bool Logger::getBlockPart(uint32_t blockIdx, uint32_t offset, uint8_t* buffer, size_t len) {
@@ -241,14 +248,18 @@ bool Logger::getBlockPart(uint32_t blockIdx, uint32_t offset, uint8_t* buffer, s
 	return true;
 }
 
-void Logger::getUsedBlockIDs(std::function<void(int)> onIdFound) {
+void Logger::getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound) {
+	//Serial.println("> getUsedBlockIDs()");
 	for (uint32_t i = 0; i < blocksTotal(); i++) {
-		uint32_t addr = i * DATA_BLOCK_SIZE;
 		BlockHeader bh;
 
-		flashReadStruct(_flash, addr, &bh);
+		flashReadStruct(_flash, i * DATA_BLOCK_SIZE, &bh);
+
+		//Serial.printf(">> #%3d: %04X %d\n", i, bh.magic, bh.timestamp);
+
+		// Проверяем валидность блока
 		if (bh.magic == BLOCK_HEADER_MAGIC && bh.timestamp != 0xFFFFFFFF) {
-			onIdFound(i);
+			onIdFound(i, bh.timestamp);
 		}
 	}
 }
