@@ -7,7 +7,8 @@
 #define SPI_CS_PIN            16
 #define DATA_BLOCK_SIZE       (64 * 1024) // !DO NOT CHANGE! (Or change all "_flash.eraseBlock64K()" in code!)
 #define BLOCK_HEADER_MAGIC    0xDDCC
-#define MIN_VALID_TS          1704067200UL // 1 Jan 2024
+#define NEOGPS_TS_OFFSET      946684800UL
+#define MIN_VALID_TS          (1767225600UL - NEOGPS_TS_OFFSET) // Unix timestamp. 01.01.2026
 #define MAX_CACHE_SIZE        1024  // 6 (MAC) + 2(Offset) = 8 bytes per record. 8 * 1024 = 8KB RAM
 
 #pragma pack(push, 1)

@@ -321,7 +321,7 @@ async function rescanNetworks(btn) {
 }
 
 function gpsToUnix(gpsSeconds) {
-	// NeoGPS li starts from 01.01.2000 00:00:00 UTC
+	// NeoGPS lib starts from 01.01.2000 00:00:00 UTC
 	const NEOGPS_EPOCH_OFFSET = 946684800;
 	return Number(gpsSeconds) + NEOGPS_EPOCH_OFFSET;
 }

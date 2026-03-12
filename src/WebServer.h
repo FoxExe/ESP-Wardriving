@@ -16,6 +16,7 @@ private:
 	AsyncWebSocket _ws;
 
 	bool _apChanged = false;
+	bool _busy = false;
 
 	void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 		AwsEventType type, void* arg, uint8_t* data, size_t len) {
@@ -129,59 +130,61 @@ public:
 			});
 
 		_server.on("/download", HTTP_GET, [this](AsyncWebServerRequest* request) {
-			// 1. Собираем список запрошенных ID блоков из параметров
-			std::vector<uint32_t> requestedBlocks;
+			WiFi.scanDelete(); // Останавливаем сканирование, чтобы не мешало
+			_busy = true;
+
+			// Используем умный указатель, чтобы не утекла память при обрыве связи
+			auto requestedBlocks = std::make_shared<std::vector<uint32_t>>();
+
 			int params = request->params();
 			for (int i = 0; i < params; i++) {
 				AsyncWebParameter* p = request->getParam(i);
 				if (p->name() == "id") {
-					uint32_t id = atoi(p->value().c_str());
+					uint32_t id = strtoul(p->value().c_str(), NULL, 10);
 					if (id < logger.blocksTotal()) {
-						requestedBlocks.push_back(id);
+						requestedBlocks->push_back(id);
 					}
 				}
 			}
 
-			if (requestedBlocks.empty()) {
-				request->send(400, "text/plain", "No valid block IDs provided");
+			if (requestedBlocks->empty()) {
+				request->send(400, "text/plain", "No valid blocks");
 				return;
 			}
 
-			// 2. Создаем потоковый ответ (Stream Response)
-			// Тип данных application/octet-stream заставит браузер начать загрузку файла
-			AsyncWebServerResponse* response = request->beginChunkedResponse("application/octet-stream",
-				[requestedBlocks](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
+			size_t totalSize = requestedBlocks->size() * DATA_BLOCK_SIZE;
 
-					// index - это сколько байт МЫ УЖЕ ПЕРЕДАЛИ в этом ответе
-					size_t totalRequestedSize = requestedBlocks.size() * DATA_BLOCK_SIZE;
+			// Передаем размер вторым аргументом -> библиотека сама поставит Content-Length
+			AsyncWebServerResponse* response = request->beginResponse("application/octet-stream", totalSize,
+				[this, requestedBlocks](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
 
-					if (index >= totalRequestedSize) {
-						return 0; // Все данные переданы, закрываем соединение
-					}
+					size_t totalRequestedSize = requestedBlocks->size() * DATA_BLOCK_SIZE;
+					if (index >= totalRequestedSize) return 0;
 
-					// Вычисляем, какой блок и какое смещение внутри него сейчас нужно прочитать
 					size_t currentBlockIdxInList = index / DATA_BLOCK_SIZE;
 					size_t offsetInBlock = index % DATA_BLOCK_SIZE;
-					uint32_t flashBlockId = requestedBlocks[currentBlockIdxInList];
+					uint32_t flashBlockId = (*requestedBlocks)[currentBlockIdxInList];
 
-					// Сколько байт мы можем прочитать за раз?
-					// Не больше, чем просит сервер (maxLen) и не больше, чем осталось в текущем блоке
 					size_t remainingInBlock = DATA_BLOCK_SIZE - offsetInBlock;
+					// Читаем маленькую порцию (обычно ~1.4KB), которую просит maxLen
 					size_t lenToRead = std::min(maxLen, remainingInBlock);
 
-					// Читаем напрямую из логгера в буфер ответа
+					// Блокирующее чтение маленького кусочка из SPI (безопасно для WDT)
 					if (logger.getBlockPart(flashBlockId, offsetInBlock, buffer, lenToRead)) {
 						return lenToRead;
 					}
 
-					return 0; // Ошибка чтения
+					return 0; // Ошибка чтения — прерываем передачу
 				});
 
 			response->addHeader("Content-Disposition", "attachment; filename=\"log_dump.bin\"");
 			request->send(response);
+			_busy = false;
 			});
 
+
 		_server.on("/GetUsedBlocks", HTTP_GET, [this](AsyncWebServerRequest* request) {
+			_busy = true;
 			AsyncResponseStream* response = request->beginResponseStream("text/plain");
 
 			// Контекст для отслеживания первой записи (чтобы не ставить лишнюю запятую)
@@ -197,6 +200,7 @@ public:
 				});
 
 			request->send(response);
+			_busy = false;
 			});
 
 		_server.on("/ScanWiFi", HTTP_POST, [this](AsyncWebServerRequest* request) {
@@ -221,7 +225,9 @@ public:
 	}
 
 	void sendWSData(uint8_t* buf, uint32_t len) {
+		_busy = true;
 		_ws.binaryAll(buf, len);
+		_busy = false;
 	}
 
 	void end() {
@@ -237,4 +243,6 @@ public:
 			_apChanged = false;
 		}
 	}
+
+	bool isBusy() { return _busy; }
 };

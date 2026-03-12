@@ -39,20 +39,18 @@ bool Logger::begin() {
 
 		//Serial.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
 		if (bh.magic != BLOCK_HEADER_MAGIC) continue;
+
 		_blocksUsed++;
 
-		// NOTE: Timestamp, sometime, can be "0xFFFFFFFF" (prepared, but empty block)
-		if (bh.timestamp >= MIN_VALID_TS && bh.timestamp > maxTs) {
-			if (bh.timestamp == 0xFFFFFFFF) {
-				// Started, but empty block. Use it!
-				latestBlockAddr = addr;
-				break;
-			}
-
+		// NOTE: Block can be "used", but "empty". TS=0xFFFFFFFF - correct and must be used first.
+		if (bh.timestamp == 0xFFFFFFFF) {
+			latestBlockAddr = addr;
+			break;
+		}
+		else if (bh.timestamp >= MIN_VALID_TS && bh.timestamp > maxTs) {
 			maxTs = bh.timestamp;
 			latestBlockAddr = addr;
 		}
-		// Blocks with wrong timestamp will be ignored here.
 	}
 
 	// If no blocks found (flash empty of filled with wrong/random data)
@@ -235,10 +233,7 @@ void Logger::eraseFlash(std::function<void(int)> onProgress) {
 
 bool Logger::getBlockPart(uint32_t blockIdx, uint32_t offset, uint8_t* buffer, size_t len) {
 	uint32_t addr = (blockIdx * DATA_BLOCK_SIZE) + offset;
-	for (size_t i = 0; i < len; i++) {
-		buffer[i] = _flash.readByte(addr + i);
-	}
-	return true;
+	return _flash.readByteArray(addr, buffer, len);
 }
 
 void Logger::getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound) {

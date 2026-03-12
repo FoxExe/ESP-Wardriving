@@ -498,8 +498,10 @@ void loop() {
 			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
 				logger.storeRecord(current);
 			}
-			WiFi.scanDelete();
-			WiFi.scanNetworks(true, true); // Асинхронно
+			if (!web.isBusy()) {
+				WiFi.scanDelete();
+				WiFi.scanNetworks(true, true); // Асинхронно
+			}
 		}
 
 		updateUI();
@@ -515,7 +517,7 @@ void loop() {
 		Serial.printf("[%02d.%02d.%04d %02d:%02d:%02d]", ptm->tm_mday, ptm->tm_mon + 1, ptm->tm_year + 1900, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
 		Serial.printf(" | HEAP: %5d", ESP.getFreeHeap());
 		Serial.printf(" | BAT: %3d%% (%7.4fv) ", battery.getPercentage(), battery.getVoltage());
-		Serial.printf(" | BLOCKS: %3d/%3d POINTS: %7d", logger.blocksUsed(), logger.blocksTotal(), logger.pointsSaved());
+		Serial.printf(" | BLK: %3d/%3d PTS: %7d in #%3d", logger.blocksUsed(), logger.blocksTotal(), logger.pointsSaved(), logger.getCurrentBlockID());
 		Serial.printf(" | LAT: %9.5f LON: %10.5f ALT: %7.4f HDOP: %7.4f ACC: %3d SATS: %2d/%2d", fix.latitude(), fix.longitude(), fix.altitude(), (float)(fix.hdop / 1000), hdopToAccuracy(fix.hdop), fix.satellites, gps.sat_count);
 		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
 		Serial.println();
