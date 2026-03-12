@@ -169,13 +169,13 @@ void updateUI() {
 	for (uint8_t i = 0; i < gps.sat_count; i++) {
 		auto& sat = gps.satellites[i];
 		if (sat.snr >= thresholdSNR) {
-			uint8_t h = map(sat.snr, 0, 99, 0, 21);
+			uint8_t h = map(sat.snr, 0, 99, 0, 23);
 			screen.rect(i * 3, 31 - h, i * 3 + 1, 31, OLED_FILL);
 
 			// sat.tracked - is a "sat is visible" not "sat used for positioning", so we need this hack:
 			for (uint8_t j = 0; j < sats_active.count; j++) {
 				if (sats_active.ids[j] == sat.id) {
-					screen.line(i * 3, 31 - h - 2, i * 3 + 1, 31 - h - 2, OLED_FILL);
+					screen.line(i * 3, 31 - h + 1, i * 3 + 1, 31 - h + 1, OLED_CLEAR);
 					break;
 				}
 			}
@@ -202,12 +202,12 @@ void updateUI() {
 	if (scanned >= 0) {
 		screen.rect(78, 8, 127, 31, OLED_CLEAR);
 		for (uint8_t i = 0; i < scanned; i++) {
-			uint8_t h = map(constrain(WiFi.RSSI(i), -100, -50), -100, -50, 0, 21);
+			uint8_t h = map(constrain(WiFi.RSSI(i), -100, -50), -100, -50, 0, 23);
 			screen.line(78 + (i * 2), 31 - h, 78 + (i * 2), 31, OLED_FILL);
 			//screen.rect(78 + (i * 2), 31 - h, 78 + (i * 3), 31, OLED_FILL);
 			//if (WiFi.isHidden(i)) {
 			if (WiFi.encryptionType(i) == ENC_TYPE_NONE) {
-				screen.dot(78 + (i * 2), 31 - h - 2, OLED_FILL);
+				screen.dot(78 + (i * 2), 31 - h + 1, OLED_CLEAR);
 			}
 			if (i > MAX_APS_BARS) break; // max 25 bars
 		}
@@ -233,10 +233,10 @@ void updateUI() {
 		screen.setScale(1);
 		*/
 	}
-	else if (WiFi.softAPgetStationNum() > 0) {
+	else if (scanned == WIFI_SCAN_FAILED) {
 		screen.rect(119, 9, 127, 15, OLED_CLEAR);
 		// Pause icon
-		screen.rect(121, 9, 122, 15, OLED_FILL);	
+		screen.rect(121, 9, 122, 15, OLED_FILL);
 		screen.rect(124, 9, 125, 15, OLED_FILL);
 		//screen.rect(78, 8, 127, 31, OLED_CLEAR);
 		//screen.setCursorXY(90, 16);
@@ -246,13 +246,27 @@ void updateUI() {
 	// ========= OTHER   =========
 	// clear area
 	screen.rect(54, 8, 71, 31, OLED_CLEAR);
-	// SPI Flash usage percentage
-	screen.setCursorXY(54, 24);
-	screen.printf("%2d%%", (logger.getUsagePercentage() >= 100) ? 99 : logger.getUsagePercentage());
 
+	// Fix OK, points capture in progress
+	if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
+		// Play icon
+		screen.line(61, 9, 61, 13, OLED_FILL);
+		screen.line(62, 10, 62, 12, OLED_FILL);
+		screen.dot(63, 11, OLED_FILL);
+	}
+	else {
+		screen.rect(60, 9, 61, 13, OLED_FILL);
+		screen.rect(63, 9, 64, 13, OLED_FILL);
+	}
+
+	// Accuracy
 	screen.setCursorXY(54, 16);
 	uint16_t acc = hdopToAccuracy(fix.hdop);
 	screen.printf("%3d", (acc > 999) ? 999 : acc);
+
+	// SPI Flash usage percentage
+	screen.setCursorXY(54, 24);
+	screen.printf("%2d%%", (logger.getUsagePercentage() >= 100) ? 99 : logger.getUsagePercentage());
 
 	screen.update();
 }
@@ -480,7 +494,8 @@ void loop() {
 		reportExt.sats_visible = gps.sat_count;
 		reportExt.sats_used = sats_active.count;
 
-		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL && WiFi.softAPgetStationNum() == 0) {
+		// && WiFi.softAPgetStationNum() == 0
+		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
 			lastScanMillis = millis();
 			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
 				logger.storeRecord(current);
