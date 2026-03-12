@@ -140,8 +140,7 @@ function parseStatusPacket(dv) {
 	const maxBlock = dv.getUint32(offset, true); offset += 4;
 	const clients = dv.getUint8(offset); offset += 1;
 	const points = dv.getUint32(offset, true); offset += 4;
-	const sats_visible = dv.getUint8(offset); offset += 1;
-	const sats_used = dv.getUint8(offset); offset += 1;
+	const current_block = dv.getUint16(offset, true); offset += 2;
 
 	// Спутники
 	const sats = [];
@@ -161,13 +160,12 @@ function parseStatusPacket(dv) {
 		offset += SAT_SIZE;
 	}
 
-	//console.log("B: %d C: %d LAT: %f LNG: %f ALT: %f HDOP: %f TS: %d P: %d FLASH: %d/%d", battery, clients, lat, lon, alt, hdop, gpsUnix, points, flashUsed, flashTotal);
-
 	// Обновляем текстовые поля UI
 	document.getElementById('gps-pos').innerText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
 	document.getElementById('gps-alt').innerText = alt.toFixed(1);
 	document.getElementById('gps-hdop').innerText = hdop.toFixed(2);
 	document.getElementById('gps-count').innerText = points;
+	document.getElementById('current-block').innerText = current_block;
 	document.getElementById('sys-clients').innerText = clients;
 	document.getElementById('sys-bat').innerText = battery;
 
@@ -322,9 +320,10 @@ async function rescanNetworks(btn) {
 	}
 }
 
-function gpsToUnix(gpsSeconds, leapSeconds = 18) {
-	const GPS_EPOCH_OFFSET = 315964800;
-	return gpsSeconds + GPS_EPOCH_OFFSET - leapSeconds;
+function gpsToUnix(gpsSeconds) {
+	// NeoGPS li starts from 01.01.2000 00:00:00 UTC
+	const NEOGPS_EPOCH_OFFSET = 946684800;
+	return Number(gpsSeconds) + NEOGPS_EPOCH_OFFSET;
 }
 
 async function loadLogs(btn) {

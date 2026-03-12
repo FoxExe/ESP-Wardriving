@@ -42,18 +42,15 @@ bool Logger::begin() {
 		_blocksUsed++;
 
 		// NOTE: Timestamp, sometime, can be "0xFFFFFFFF" (prepared, but empty block)
-		if (bh.timestamp >= MIN_VALID_TS && bh.timestamp != 0xFFFFFFFF && bh.timestamp > maxTs) {
+		if (bh.timestamp >= MIN_VALID_TS && bh.timestamp > maxTs) {
+			if (bh.timestamp == 0xFFFFFFFF) {
+				// Started, but empty block. Use it!
+				latestBlockAddr = addr;
+				break;
+			}
+
 			maxTs = bh.timestamp;
 			latestBlockAddr = addr;
-
-			// DEBUG: Dump first bytes
-			uint8_t buff[32];
-			_flash.readByteArray(addr, buff, 32);
-			Serial.printf("> FOUND BLOCK #%3d:", i);
-			for (uint8_t i = 0; i < 32; i++) {
-				Serial.printf(" %02X", buff[i]);
-			}
-			Serial.println();
 		}
 		// Blocks with wrong timestamp will be ignored here.
 	}
@@ -80,7 +77,7 @@ bool Logger::begin() {
 			if (tempGps.timestamp < MIN_VALID_TS || tempGps.timestamp == 0xFFFFFFFF) break;
 
 			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.ap_count * sizeof(AP_Signal_Record));
-			_ptrTop = align4(_ptrTop);
+			//_ptrTop = align4(_ptrTop);
 		}
 
 		// Restore AP_Info data
@@ -106,6 +103,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 	int networksFound = WiFi.scanComplete();
 	// If there is no WiFi info available
 	if (networksFound < 0) return false;
+	gps.ap_count = networksFound; // Just to be sure its same.
 
 	uint32_t newApSpace = 0;
 	std::vector<int> newNets;
@@ -118,12 +116,13 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 
 	uint32_t gpsSpace = sizeof(GPS_Position_Info) + (networksFound * sizeof(AP_Signal_Record));
 
-	if (align4(_ptrTop + gpsSpace) >= (_ptrBottom - newApSpace)) {
+	//if (align4(_ptrTop + gpsSpace) >= (_ptrBottom - newApSpace)) {
+	if (_ptrTop + gpsSpace >= (_ptrBottom - newApSpace)) {
 		if (!prepareNextBlock()) return false;
 		return storeRecord(gps);
 	}
 
-	// Save new networks (not listened in cache)
+	// Save new AP_Info (not listened in cache)
 	for (int idx : newNets) {
 		String ssid = WiFi.SSID(idx);
 		uint8_t sLen = (ssid.length() > 32) ? 32 : ssid.length();
@@ -136,10 +135,11 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		addToCache(info.mac, _ptrBottom);
 		// Save SSID (Wi-Fi ap name)
 		_ptrBottom -= sLen;
-		_flash.writeStr(_currentBlockAddr + _ptrBottom, ssid);
+		if (sLen > 0) _flash.writeByteArray(_currentBlockAddr + _ptrBottom, (uint8_t*)ssid.c_str(), sLen);
 		_ptrBottom -= sizeof(AP_Info); // Prepare address for next data
 	}
 
+	// Save GPS_Position_Info
 	flashWriteStruct(_flash, _currentBlockAddr + _ptrTop, gps);
 	_ptrTop += sizeof(GPS_Position_Info);
 
@@ -151,7 +151,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		_ptrTop += sizeof(AP_Signal_Record);
 	}
 
-	_ptrTop = align4(_ptrTop);
+	//_ptrTop = align4(_ptrTop);
 	_pointsSaved++;
 	return true;
 }

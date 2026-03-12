@@ -51,8 +51,7 @@ struct ExtendedReport {
 	uint32_t heap_max = 0;
 	uint8_t ap_clients = 0;
 	uint32_t saved_points = 0;
-	uint8_t sats_visible = 0;
-	uint8_t sats_used = 0;
+	uint16_t current_block = 0;
 } reportExt;
 
 struct ActiveSatellites {
@@ -491,8 +490,7 @@ void loop() {
 		reportExt.heap_max = ESP.getMaxFreeBlockSize();
 		reportExt.ap_clients = WiFi.softAPgetStationNum();
 		reportExt.saved_points = logger.pointsSaved();
-		reportExt.sats_visible = gps.sat_count;
-		reportExt.sats_used = sats_active.count;
+		reportExt.current_block = logger.getCurrentBlockID();
 
 		// && WiFi.softAPgetStationNum() == 0
 		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
@@ -552,6 +550,9 @@ void loop() {
 
 			Serial.print(F("Progress: ")); Serial.print(percent); Serial.println("%");
 			});
+
+		screen.clear();
+		screen.update();
 	}
 
 	if (millis() - lastBatteryUpdate >= 1000) {

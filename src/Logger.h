@@ -90,6 +90,7 @@ public:
 	uint32_t blocksTotal() { return _flashSize / DATA_BLOCK_SIZE; }
 	uint32_t blocksFree() { return blocksTotal() - blocksUsed(); }
 	uint32_t blocksUsed() { return _blocksUsed; }
+	uint16_t getCurrentBlockID() { return (uint16_t)(_currentBlockAddr / DATA_BLOCK_SIZE); }
 	uint32_t flashSize() { return _flashSize; }
 	uint32_t pointsSaved() { return _pointsSaved; }
 	uint8_t getUsagePercentage() { return (uint8_t)((blocksUsed() * 100) / blocksTotal()); };
