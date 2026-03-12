@@ -8,11 +8,47 @@
 		<link rel="stylesheet" href="style.css" />
 	</head>
 	<body class="bg-light is-offline">
+		<svg style="display: none">
+			<!-- Иконка Wi-Fi -->
+			<symbol id="icon-wifi" viewBox="0 0 16 16">
+				<path d="M15.384 6.115a.485.485 0 0 0-.047-.736A12.444 12.444 0 0 0 8 4a12.444 12.444 0 0 0-7.337 1.379.485.485 0 0 0-.047.736l.518.518a.487.487 0 0 0 .63.059A10.44 10.44 0 0 1 8 5.5a10.44 10.44 0 0 1 6.236 1.192.487.487 0 0 0 .63-.059l.518-.518z" />
+				<path d="M11.612 8.462a.485.485 0 0 0-.04-.682A7.452 7.452 0 0 0 8 6.5a7.452 7.452 0 0 0-3.572 1.28.485.485 0 0 0-.04.682l.533.533a.487.487 0 0 0 .61.074A5.474 5.474 0 0 1 8 8.25c1.026 0 1.97.283 2.772.775a.487.487 0 0 0 .61-.074l.533-.533z" />
+			</symbol>
+			<symbol id="icon-settings" viewBox="0 0 16 16">
+				<path
+					d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"
+				/>
+			</symbol>
+			<symbol id="icon-warning" viewBox="0 0 16 16">
+				<path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+			</symbol>
+			<symbol id="icon-position" viewBox="0 0 16 16">
+				<path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" />
+			</symbol>
+			<symbol id="icon-battery" viewBox="0 0 16 16">
+				<path d="M2 6h10v4H2V6z" />
+				<path d="M2 4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H2zm10 1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h10z" />
+				<path d="M14 7v2a1 1 0 0 0 1 1V6a1 1 0 0 0-1 1z" />
+			</symbol>
+			<symbol id="icon-reload" viewBox="0 0 16 16">
+				<path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+				<path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+			</symbol>
+			<symbol id="icon-poweroff" viewBox="0 0 16 16">
+				<path d="M7.5 1v7h1V1h-1z" />
+				<path d="M3 8.812a4.999 4.999 0 0 1 2.578-4.375l-.485-.874A6 6 0 1 0 11 3.616l-.501.865A5 5 0 1 1 3 8.812z" />
+			</symbol>
+			<symbol id="icon-clock" viewBox="0 0 16 16">
+				<path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
+				<path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
+			</symbol>
+		</svg>
+
 		<nav class="navbar navbar-dark bg-dark shadow-sm sticky-top text-white">
 			<div class="container">
 				<span class="navbar-brand d-flex align-items-center">
-					<svg class="me-2" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-						<path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" />
+					<svg class="me-2" width="20" height="20" fill="currentColor">
+						<use href="#icon-position"></use>
 					</svg>
 					<span class="d-none d-sm-inline">GPS Tracker</span>
 				</span>
@@ -20,20 +56,16 @@
 				<div class="d-flex align-items-center">
 					<!-- Заряд батареи -->
 					<div id="bat-container" class="me-3 d-flex align-items-center fw-bold transition-color">
-						<svg width="20" height="20" class="me-1" fill="currentColor" viewBox="0 0 16 16">
-							<path d="M2 6h10v4H2V6z" />
-							<path d="M2 4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H2zm10 1a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h10z" />
-							<path d="M14 7v2a1 1 0 0 0 1 1V6a1 1 0 0 0-1 1z" />
+						<svg class="me-1" width="20" height="20" fill="currentColor">
+							<use href="#icon-battery"></use>
 						</svg>
 						<span id="sys-bat">--</span>
 						<small>%</small>
 					</div>
 
 					<button class="btn btn-outline-light btn-sm border-0 me-2 shadow-none" data-bs-toggle="modal" data-bs-target="#configModal" title="Настройки" onclick="loadConfig()">
-						<svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-							<path
-								d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"
-							/>
+						<svg width="20" height="20" fill="currentColor">
+							<use href="#icon-settings"></use>
 						</svg>
 					</button>
 					<div id="status-indicator" class="status-dot shadow-sm" title="Связь"></div>
@@ -44,8 +76,8 @@
 		<div class="container mt-3">
 			<!-- Warning Alert -->
 			<div id="scan-alert" class="alert alert-warning d-flex align-items-center alert-dismissible fade show border-0 shadow-sm mb-3" role="alert">
-				<svg class="bi flex-shrink-0 me-2" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-					<path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+				<svg class="bi flex-shrink-0 me-2" width="20" height="20" fill="currentColor">
+					<use href="#icon-warning"></use>
 				</svg>
 				<div>Сканирование Wi-Fi приостановлено, пока есть активные веб-клиенты.</div>
 				<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -56,7 +88,14 @@
 				<div class="col-lg-8">
 					<!-- Таблица Wi-Fi -->
 					<div class="card border-0 shadow-sm mb-3">
-						<div class="card-header bg-white py-3 fw-bold border-0">Окружающие Wi-Fi сети</div>
+						<div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-0">
+							<h6 class="mb-0 fw-bold">Окружающие Wi-Fi сети</h6>
+							<button id="btn-blocks-reload" class="btn btn-sm btn-secondary shadow-sm px-3" onclick="rescanNetworks(this)">
+								<svg width="18" height="18" fill="currentColor">
+									<use href="#icon-reload"></use>
+								</svg>
+							</button>
+						</div>
 						<div class="table-responsive">
 							<table class="table table-hover align-middle mb-0" id="wifi-table" data-asc="true">
 								<thead class="table-light">
@@ -78,10 +117,10 @@
 							<h6 class="mb-0 fw-bold">Архив логов (Flash Blocks)</h6>
 							<div>
 								<button id="btn-download-many" class="btn btn-sm btn-primary shadow-sm px-3" disabled onclick="downloadSelected()">Скачать выбранные</button>
-								<button id="btn-blocks-reload" class="btn btn-sm btn-secondary shadow-sm px-3" onclick="loadLogs()">
-									<svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-										<path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
-										<path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+								<button type="button" class="btn btn-sm btn-danger me-auto shadow-sm px-3" onclick="eraseFlash(this)">Удалить всё</button>
+								<button id="btn-blocks-reload" class="btn btn-sm btn-secondary shadow-sm px-3" onclick="loadLogs(this)">
+									<svg width="18" height="18" fill="currentColor">
+										<use href="#icon-reload"></use>
 									</svg>
 								</button>
 							</div>
@@ -90,15 +129,10 @@
 							<table class="table table-hover align-middle mb-0" id="log-table">
 								<thead class="table-light sticky-top">
 									<tr>
-										<th style="width: 50px" class="ps-3"><input type="checkbox" class="form-check-input" onchange="toggleAllBlocks(this)" /></th>
+										<th style="width: 50px" class="ps-3"><input id="logsCheckbox" type="checkbox" class="form-check-input" onchange="toggleAllBlocks(this)" /></th>
 										<th>Имя блока</th>
 										<th>Размер</th>
-										<th class="pe-3">
-											Дата
-											<button class="btn btn-link btn-sm p-0 ms-1" onclick="toggleTimeFormat()">
-												<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.5-13v5.793l3.354 3.353-.707.708L7.5 9.207V3h1z" /></svg>
-											</button>
-										</th>
+										<th>Дата</th>
 									</tr>
 								</thead>
 								<tbody id="log-list"></tbody>
@@ -134,10 +168,14 @@
 									</span>
 								</div>
 								<div class="d-flex justify-content-between border-bottom pb-1">
-									<span class="text-muted small">HDOP / Спутники</span>
+									<span class="text-muted small">Точность</span>
 									<span>
 										<span id="gps-hdop">--</span>
-										/
+									</span>
+								</div>
+								<div class="d-flex justify-content-between border-bottom pb-1">
+									<span class="text-muted small">Спутники</span>
+									<span>
 										<span id="gps-sats">--</span>
 									</span>
 								</div>
@@ -157,7 +195,7 @@
 
 							<!-- Flash -->
 							<div class="d-flex justify-content-between mb-1 small">
-								<span>Flash (SPI):</span>
+								<span>Flash (Blocks):</span>
 								<span id="sys-flash" class="fw-bold">-- / --</span>
 							</div>
 							<div class="progress mb-3" style="height: 8px">
@@ -209,15 +247,13 @@
 						<h5 class="modal-title">Настройки</h5>
 						<div class="ms-auto d-flex">
 							<button type="button" class="btn btn-warning btn-sm me-1 shadow-sm" onclick="apiPost('/reboot')" data-bs-toggle="tooltip" title="Перезагрузка">
-								<svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-									<path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
-									<path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
+								<svg width="18" height="18" fill="currentColor">
+									<use href="#icon-reload"></use>
 								</svg>
 							</button>
 							<button type="button" class="btn btn-danger btn-sm shadow-sm" onclick="apiPost('/poweroff')" data-bs-toggle="tooltip" title="Выключить">
-								<svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-									<path d="M7.5 1v7h1V1h-1z" />
-									<path d="M3 8.812a4.999 4.999 0 0 1 2.578-4.375l-.485-.874A6 6 0 1 0 11 3.616l-.501.865A5 5 0 1 1 3 8.812z" />
+								<svg width="18" height="18" fill="currentColor">
+									<use href="#icon-poweroff"></use>
 								</svg>
 							</button>
 						</div>
@@ -228,21 +264,28 @@
 							<div class="col-12"><small class="text-muted text-uppercase fw-bold border-bottom d-block pb-1">Точка доступа (AP)</small></div>
 							<div class="col-6">
 								<label class="form-label small">SSID</label>
-								<input type="text" name="apSSID" class="form-control form-control-sm shadow-none" maxlength="31" />
+								<input type="text" name="ssid" class="form-control form-control-sm shadow-none" maxlength="31" />
 							</div>
 							<div class="col-6">
 								<label class="form-label small">Пароль</label>
-								<input type="password" name="apPass" class="form-control form-control-sm shadow-none" maxlength="31" />
+								<input type="password" name="pass" class="form-control form-control-sm shadow-none" maxlength="63" />
 							</div>
 
 							<div class="col-12 mt-3"><small class="text-muted text-uppercase fw-bold border-bottom d-block pb-1">Логирование</small></div>
 							<div class="col-6">
 								<label class="form-label small">Интервал (сек)</label>
-								<input type="number" name="logInterval" class="form-control form-control-sm shadow-none" />
+								<input type="number" name="scan_interval" class="form-control form-control-sm shadow-none" min="1" max="65535" />
 							</div>
 							<div class="col-6">
-								<label class="form-label small">Мин. HDOP</label>
-								<input type="number" name="minHDOP" step="0.1" class="form-control form-control-sm shadow-none" />
+								<label class="form-label small">Мин. точность (м)</label>
+								<input type="number" name="min_acc" class="form-control form-control-sm shadow-none" min="1" max="65535" />
+							</div>
+
+							<div class="col-12 mt-2">
+								<div class="form-check form-switch">
+									<input class="form-check-input" type="checkbox" name="rotate_logs" id="rotateLogs" />
+									<label class="form-check-label small" for="rotateLogs">Циклическая перезапись логов</label>
+								</div>
 							</div>
 
 							<div class="col-12 mt-3"><small class="text-muted text-uppercase fw-bold border-bottom d-block pb-1">Время и Часовой пояс</small></div>
@@ -254,9 +297,8 @@
 								<div class="input-group input-group-sm shadow-none">
 									<select name="tzOffset" id="tzSelect" class="form-select shadow-none"></select>
 									<button class="btn btn-secondary shadow-none" type="button" onclick="setBrowserTZ()" id="btnBrowserTZ">
-										<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-											<path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
-											<path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
+										<svg width="16" height="16" fill="currentColor">
+											<use href="#icon-clock"></use>
 										</svg>
 									</button>
 								</div>
@@ -264,7 +306,6 @@
 						</div>
 					</div>
 					<div class="modal-footer bg-light border-0">
-						<button type="button" class="btn btn-sm btn-danger me-auto shadow-sm px-3" onclick="apiPost('/DeleteAll')">Формат Flash</button>
 						<button type="submit" class="btn btn-sm btn-primary px-4 shadow-sm">Сохранить</button>
 					</div>
 				</form>

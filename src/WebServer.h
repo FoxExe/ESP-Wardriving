@@ -3,6 +3,7 @@
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 
+#include "Settings.h"
 #include "Logger.h"
 
 #define WS_TYPE_STATS 0x01
@@ -13,6 +14,8 @@ class WebServer {
 private:
 	AsyncWebServer _server;
 	AsyncWebSocket _ws;
+
+	bool _apChanged = false;
 
 	void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 		AwsEventType type, void* arg, uint8_t* data, size_t len) {
@@ -55,6 +58,73 @@ public:
 			}
 			else {
 				request->send(404, "text/plain", "404: Not Found");
+			}
+			});
+
+		_server.on("/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
+			String json = "{";
+			json += "\"ssid\":\"" + String(cfg.ssid) + "\",";
+			json += "\"pass\":\"" + String(cfg.pass) + "\",";
+			json += "\"scan_interval\":" + String(cfg.scan_interval) + ",";
+			json += "\"min_acc\":" + String(cfg.min_acc) + ",";
+			json += "\"tz_offset\":" + String(cfg.tz_offset) + ",";
+			json += "\"auto_tz\":" + String(cfg.auto_tz ? "true" : "false") + ",";
+			json += "\"rotate_logs\":" + String(cfg.rotate_logs ? "true" : "false");
+			json += "}";
+
+			request->send(200, "application/json", json);
+			});
+
+
+		_server.on("/config", HTTP_POST, [this](AsyncWebServerRequest* request) {
+			// AP SSID
+			if (request->hasParam("ssid", true)) {
+				String newSSID = request->getParam("ssid", true)->value();
+				if (newSSID != String(cfg.ssid)) {
+					strncpy(cfg.ssid, newSSID.c_str(), 31);
+					_apChanged = true;
+				}
+			}
+
+			// AP Password
+			if (request->hasParam("pass", true)) {
+				String newPass = request->getParam("pass", true)->value();
+				if (newPass != String(cfg.pass)) {
+					strncpy(cfg.pass, newPass.c_str(), 63);
+					_apChanged = true;
+				}
+			}
+
+			// Numeric fields (uint16_t, int16_t)
+			if (request->hasParam("scan_interval", true)) {
+				cfg.scan_interval = (uint16_t)request->getParam("scan_interval", true)->value().toInt();
+			}
+
+			if (request->hasParam("min_acc", true)) {
+				cfg.min_acc = (int16_t)request->getParam("min_acc", true)->value().toInt();
+			}
+
+			if (request->hasParam("tz_offset", true)) {
+				cfg.tz_offset = (int16_t)request->getParam("tz_offset", true)->value().toInt();
+			}
+
+			// Checkbox'es - just check if it preset in data
+			cfg.auto_tz = request->hasParam("auto_tz", true);
+			cfg.rotate_logs = request->hasParam("rotate_logs", true);
+
+			// Save new config
+			if (cfg.save()) {
+				if (_apChanged) {
+					// Применяем новые настройки точки доступа немедленно
+					request->send(200, "text/plain", "RECONNECT");
+				}
+				else {
+					request->send(200, "text/plain", "OK");
+				}
+			}
+			else {
+				request->send(200, "text/plain", "FAIL: Save error");
+				_apChanged = false;
 			}
 			});
 
@@ -129,7 +199,20 @@ public:
 			request->send(response);
 			});
 
-		_server.on("/DeleteAll", HTTP_POST, [this](AsyncWebServerRequest* request) {
+		_server.on("/ScanWiFi", HTTP_POST, [this](AsyncWebServerRequest* request) {
+			// Проверяем, не идет ли уже сканирование
+			int8_t scanResult = WiFi.scanComplete();
+			if (scanResult == WIFI_SCAN_RUNNING) {
+				request->send(200, "text/plain", "-1");
+			}
+			else {
+				// Запускаем новое асинхронное сканирование
+				WiFi.scanNetworks(true, true);
+				request->send(200, "text/plain", "OK");
+			}
+			});
+
+		_server.on("/EraseFlash", HTTP_POST, [this](AsyncWebServerRequest* request) {
 			logger.requestErase();
 			request->send(200, "text/plain", "OK");
 			});
@@ -148,5 +231,10 @@ public:
 
 	void update() {
 		_ws.cleanupClients();
+		if (_apChanged) {
+			delay(1000); // wait until browser get answer
+			WiFi.softAP(cfg.ssid, cfg.pass);
+			_apChanged = false;
+		}
 	}
 };

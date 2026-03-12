@@ -6,21 +6,14 @@ Logger logger(SPI_CS_PIN);
 GPS_Position_Info current;
 
 // Вспомогательные функции для работы со структурами
-// Если библиотека капризничает с шаблонами, используем побайтовую запись
 template <typename T>
 void flashWriteStruct(SPIFlash& f, uint32_t addr, const T& data) {
-	uint8_t* ptr = (uint8_t*)&data;
-	for (size_t i = 0; i < sizeof(T); i++) {
-		f.writeByte(addr + i, ptr[i]);
-	}
+	f.writeByteArray(addr, (uint8_t*)&data, sizeof(T));
 }
 
 template <typename T>
-void flashReadStruct(SPIFlash& f, uint32_t addr, T* data) {
-	uint8_t* ptr = (uint8_t*)data;
-	for (size_t i = 0; i < sizeof(T); i++) {
-		ptr[i] = f.readByte(addr + i);
-	}
+void flashReadStruct(SPIFlash& f, uint32_t addr, T& data) {
+	f.readByteArray(addr, (uint8_t*)&data, sizeof(T));
 }
 
 Logger::Logger(uint8_t csPin) : _flash(csPin) {
@@ -42,27 +35,25 @@ bool Logger::begin() {
 	for (uint32_t i = 0; i < blocksTotal(); i++) {
 		uint32_t addr = i * DATA_BLOCK_SIZE;
 		BlockHeader bh;
+		flashReadStruct(_flash, addr, bh);
 
-		flashReadStruct(_flash, addr, &bh);
 		//Serial.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
-		if (bh.magic != BLOCK_HEADER_MAGIC) {
-			continue;
-		}
+		if (bh.magic != BLOCK_HEADER_MAGIC) continue;
+		_blocksUsed++;
+
 		// NOTE: Timestamp, sometime, can be "0xFFFFFFFF" (prepared, but empty block)
-		if (bh.timestamp >= MIN_VALID_TS && bh.timestamp > maxTs) {
+		if (bh.timestamp >= MIN_VALID_TS && bh.timestamp != 0xFFFFFFFF && bh.timestamp > maxTs) {
 			maxTs = bh.timestamp;
 			latestBlockAddr = addr;
 
 			// DEBUG: Dump first bytes
 			uint8_t buff[32];
 			_flash.readByteArray(addr, buff, 32);
-			//Serial.print(F("> FOUND DATA:"));
+			Serial.printf("> FOUND BLOCK #%3d:", i);
 			for (uint8_t i = 0; i < 32; i++) {
 				Serial.printf(" %02X", buff[i]);
 			}
 			Serial.println();
-
-			_blocksUsed += 1;
 		}
 		// Blocks with wrong timestamp will be ignored here.
 	}
@@ -79,32 +70,27 @@ bool Logger::begin() {
 
 		_blockCache.clear();
 		_ptrTop = 2; // skip Magic
-		_ptrBottom = DATA_BLOCK_SIZE - 1 - sizeof(AP_Info);
+		_ptrBottom = DATA_BLOCK_SIZE - sizeof(AP_Info);
 
 		// Search for GPS+SIGNALS records
-		while (_ptrTop < DATA_BLOCK_SIZE - 64) {
+		while (_ptrTop < DATA_BLOCK_SIZE - sizeof(GPS_Position_Info)) {
 			GPS_Position_Info tempGps;
-			flashReadStruct(_flash, _currentBlockAddr + _ptrTop, &tempGps);
+			flashReadStruct(_flash, _currentBlockAddr + _ptrTop, tempGps);
 
 			if (tempGps.timestamp < MIN_VALID_TS || tempGps.timestamp == 0xFFFFFFFF) break;
 
-			uint16_t recordSize = sizeof(GPS_Position_Info) + (tempGps.ap_count * sizeof(AP_Signal_Record));
-			_ptrTop = align4(_ptrTop + recordSize);
+			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.ap_count * sizeof(AP_Signal_Record));
+			_ptrTop = align4(_ptrTop);
 		}
 
-		while (_ptrBottom < _ptrTop) {
+		// Restore AP_Info data
+		while (_ptrBottom > _ptrTop) {
 			AP_Info info;
-			flashReadStruct(_flash, _currentBlockAddr + _ptrBottom, &info);
-
+			flashReadStruct(_flash, _currentBlockAddr + _ptrBottom, info);
 			if (info.ssid_len == 0xFF || info.channel_enc == 0xFF) break;
 
-			// Fill cache
-			CacheEntry entry;
-			memcpy(entry.mac, &info.mac, 6); // Внимательно: тут mac[6] в структуре
-			entry.offset = _ptrBottom;
-			_blockCache.push_back(entry);
-
-			_ptrBottom -= info.ssid_len - sizeof(AP_Info);
+			addToCache(info.mac, _ptrBottom);
+			_ptrBottom -= (info.ssid_len + sizeof(AP_Info));
 		}
 	}
 
@@ -115,7 +101,7 @@ bool Logger::begin() {
 
 bool Logger::storeRecord(GPS_Position_Info& gps) {
 	// If flash full and log rotation not enabled
-	if (_isFull) { return false; }
+	if (_isFull) return false;
 
 	int networksFound = WiFi.scanComplete();
 	// If there is no WiFi info available
@@ -137,18 +123,17 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		return storeRecord(gps);
 	}
 
-	// Save new nets (not listened in cache)
+	// Save new networks (not listened in cache)
 	for (int idx : newNets) {
 		String ssid = WiFi.SSID(idx);
-		uint8_t sLen = ssid.length();
+		uint8_t sLen = (ssid.length() > 32) ? 32 : ssid.length();
 
 		AP_Info info;
-		memcpy(&info.mac, WiFi.BSSID(idx), 6);
+		memcpy(info.mac, WiFi.BSSID(idx), 6);
 		info.channel_enc = (WiFi.channel(idx) << 4) | (uint8_t)WiFi.encryptionType(idx);
 		info.ssid_len = sLen;
 		flashWriteStruct(_flash, _currentBlockAddr + _ptrBottom, info);
-		// Save offset into cache
-		addToCache((uint8_t*)&info.mac, _ptrBottom);
+		addToCache(info.mac, _ptrBottom);
 		// Save SSID (Wi-Fi ap name)
 		_ptrBottom -= sLen;
 		_flash.writeStr(_currentBlockAddr + _ptrBottom, ssid);
@@ -161,7 +146,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 	for (int i = 0; i < networksFound; i++) {
 		AP_Signal_Record sig;
 		sig.offset = getOffsetFromCache(WiFi.BSSID(i));
-		sig.rssi = WiFi.RSSI(i);
+		sig.rssi = (int8_t)WiFi.RSSI(i);
 		flashWriteStruct(_flash, _currentBlockAddr + _ptrTop, sig);
 		_ptrTop += sizeof(AP_Signal_Record);
 	}
@@ -172,43 +157,51 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 }
 
 bool Logger::prepareNextBlock() {
-	_currentBlockAddr += DATA_BLOCK_SIZE;
-	if (_currentBlockAddr >= _flashSize) {
-		_currentBlockAddr = 0;
+	uint32_t nextAddr = _currentBlockAddr + DATA_BLOCK_SIZE;
+	if (nextAddr >= _flashSize) nextAddr = 0;
+
+	// Сначала проверяем, можно ли использовать следующий блок
+	if (!_rotateLogs) {
+		uint16_t nextMagic;
+		// Читаем только первые 2 байта (Magic)
+		_flash.readByteArray(nextAddr, (uint8_t*)&nextMagic, 2);
+		if (nextMagic == BLOCK_HEADER_MAGIC) {
+			_isFull = true;
+			return false;
+		}
 	}
 
-	// Check if block is empty
-	uint16_t magic = 0;
-	flashReadStruct(_flash, _currentBlockAddr, &magic);
-	if (magic == BLOCK_HEADER_MAGIC && !_rotateLogs) {
-		_isFull = true;
-		return false;
-	}
-
+	// Если всё ок — переходим на новый адрес и стираем
+	_currentBlockAddr = nextAddr;
 	if (!_flash.eraseBlock64K(_currentBlockAddr)) return false;
 
-	magic = BLOCK_HEADER_MAGIC;
-	flashWriteStruct(_flash, _currentBlockAddr, magic);
+	// Инициализация заголовка
+	uint16_t magic = BLOCK_HEADER_MAGIC;
+	_flash.writeWord(_currentBlockAddr, magic);
+
 	_blockCache.clear();
 	_ptrTop = 2; // skip Magic
-	_ptrBottom = DATA_BLOCK_SIZE - 1 - sizeof(AP_Info);
+	_ptrBottom = DATA_BLOCK_SIZE - sizeof(AP_Info);
 
-	if (_blocksUsed + 1 < blocksTotal()) { _blocksUsed += 1; }
+	// Увеличиваем счетчик занятых блоков (но не выше максимума)
+	if (_blocksUsed < blocksTotal()) {
+		_blocksUsed++;
+	}
+
 	return true;
 }
 
 void Logger::addToCache(uint8_t* mac, uint16_t offset) {
-	if (_blockCache.size() < MAX_CACHE_SIZE) {
-		CacheEntry e;
-		memcpy(&e.mac, mac, 6);
-		e.offset = offset;
-		_blockCache.push_back(e);
-	}
+	if (_blockCache.size() >= MAX_CACHE_SIZE) return;
+	CacheEntry e;
+	memcpy(e.mac, mac, 6);
+	e.offset = offset;
+	_blockCache.push_back(e);
 }
 
 uint16_t Logger::getOffsetFromCache(uint8_t* mac) {
-	for (auto const& e : _blockCache) {
-		if (memcmp(&e.mac, mac, 6) == 0) return e.offset;
+	for (const auto& e : _blockCache) {
+		if (memcmp(e.mac, mac, 6) == 0) return e.offset;
 	}
 	return 0;
 }
@@ -253,7 +246,7 @@ void Logger::getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound) {
 	for (uint32_t i = 0; i < blocksTotal(); i++) {
 		BlockHeader bh;
 
-		flashReadStruct(_flash, i * DATA_BLOCK_SIZE, &bh);
+		flashReadStruct(_flash, i * DATA_BLOCK_SIZE, bh);
 
 		//Serial.printf(">> #%3d: %04X %d\n", i, bh.magic, bh.timestamp);
 

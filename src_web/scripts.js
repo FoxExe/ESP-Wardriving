@@ -14,54 +14,48 @@ window.onload = () => {
 	document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(t => new bootstrap.Tooltip(t));
 
 	document.getElementById('configForm').onsubmit = async (e) => {
-		e.preventDefault(); // Останавливаем обычную отправку формы
-
-		const f = e.target;
-		// Считаем размер: 32(SSID) + 32(Pass) + 4(int) + 4(float) + 1(int8) + 1(bool) + 4(crc) = 78 байт
-		const buffer = new ArrayBuffer(78);
-		const dv = new DataView(buffer);
-		const enc = new TextEncoder();
-
-		// 1. SSID (смещение 0, длина 32)
-		const ssid = enc.encode(f.apSSID.value);
-		new Uint8Array(buffer, 0, 32).set(ssid.slice(0, 31));
-
-		// 2. Pass (смещение 32, длина 32)
-		const pass = enc.encode(f.apPass.value);
-		new Uint8Array(buffer, 32, 32).set(pass.slice(0, 31));
-
-		// 3. logInterval (смещение 64, uint32)
-		dv.setUint32(64, parseInt(f.logInterval.value), true);
-
-		// 4. minHDOP (смещение 68, float32)
-		dv.setFloat32(68, parseFloat(f.minHDOP.value), true);
-
-		// 5. tzOffset (смещение 72, int8)
-		dv.setInt8(72, parseInt(f.tzOffset.value));
-
-		// 6. autoTZ (смещение 73, uint8/bool)
-		dv.setUint8(73, f.autoTZ.checked ? 1 : 0);
-
-		// 7. CRC (смещение 74) - можно забить нулями, ESP пересчитает сама
-		dv.setUint32(74, 0, true);
+		e.preventDefault();
+		const formData = new FormData(e.target);
 
 		try {
 			const response = await fetch('/config', {
 				method: 'POST',
-				body: buffer,
-				headers: { 'Content-Type': 'application/octet-stream' }
+				body: formData
 			});
 
-			if (response.ok) {
-				alert("Настройки успешно сохранены!");
+			const result = await response.text();
+			if (result === "OK") {
+				alert("Настройки сохранены!");
 				bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
-			} else {
-				alert("Ошибка сервера: " + response.status);
+			}
+			else if (result === "RECONNECT") {
+				const newSSID = document.getElementsByName('ssid')[0].value;
+				alert(`ВНИМАНИЕ!\nНастройки точки доступа изменены.\nСейчас вы будете отключены.\nПереподключитесь к сети: ${newSSID}`);
+
+				// Закрываем модалку и, например, редиректим на пустую страницу через 3 сек
+				bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+				setTimeout(() => { window.location.reload(); }, 5000);
+			}
+			else {
+				alert("Ошибка: " + result);
 			}
 		} catch (err) {
 			alert("Ошибка сети: " + err.message);
 		}
 	};
+
+	document.getElementById('log-list').addEventListener('change', (e) => {
+		if (e.target.type === 'checkbox') {
+			const main = document.getElementById('logsCheckbox');
+			const all = document.querySelectorAll('#log-list input[type="checkbox"]');
+			const checked = document.querySelectorAll('#log-list input[type="checkbox"]:checked');
+
+			// Главный чекбокс активен только если выбраны ВСЕ под-чекбоксы
+			main.checked = (all.length === checked.length);
+			// Состояние "неопределенности", если выбрана часть (визуальный минус в боксе)
+			main.indeterminated = (checked.length > 0 && checked.length < all.length);
+		}
+	});
 };
 
 function initWebSocket() {
@@ -86,9 +80,7 @@ function initWebSocket() {
 				break;
 
 			case 0x02: // WiFi Header [Type][Count]
-				expectedWifiCount = dvFull.getUint8(1);
-				incomingWifi = [];
-				if (expectedWifiCount === 0) renderWifiList([]);
+				parseWiFiPacket(new DataView(event.data, 1));
 				break;
 
 			case 0x03: // WiFi Entry (Fixed 42 bytes) [Type][SSID(32)][BSSID(6)][RSSI(1)][Auth(1)][Chan(1)]
@@ -142,8 +134,8 @@ function parseStatusPacket(dv) {
 	const ap_count = dv.getUint8(offset); offset += 1;
 
 	// Extended info entry
-	const flashTotal = dv.getUint32(offset, true); offset += 4;
-	const flashUsed = dv.getUint32(offset, true); offset += 4;
+	const blocksTotal = dv.getUint32(offset, true); offset += 4;
+	const blocksUsed = dv.getUint32(offset, true); offset += 4;
 	const freeHeap = dv.getUint32(offset, true); offset += 4;
 	const maxBlock = dv.getUint32(offset, true); offset += 4;
 	const clients = dv.getUint8(offset); offset += 1;
@@ -180,9 +172,9 @@ function parseStatusPacket(dv) {
 	document.getElementById('sys-bat').innerText = battery;
 
 	// Flash bar
-	const flashPct = (flashUsed / flashTotal * 100) || 0;
+	const flashPct = (blocksUsed / blocksTotal * 100) || 0;
 	document.getElementById('flash-bar').style.width = flashPct + '%';
-	document.getElementById('sys-flash').innerText = `${(flashUsed / 1024).toFixed(0)} / ${(flashTotal / 1024).toFixed(0)} КБ`;
+	document.getElementById('sys-flash').innerText = `${blocksUsed} / ${blocksTotal.toFixed(0)}`;
 
 	// Рендер RAM
 	const totalHeap = 81920; // 80 KB для ESP8266
@@ -206,21 +198,53 @@ function parseStatusPacket(dv) {
 	renderSatBars(sats);
 }
 
-function parseWiFiEntry(data) {
-	const dv = new DataView(data);
-	const ssid = new TextDecoder().decode(new Uint8Array(data, 1, 32)).replace(/\0/g, '');
-	const bssid = Array.from(new Uint8Array(data, 33, 6)).map(b => b.toString(16).padStart(2, '0')).join(':');
-
-	incomingWifi.push({
-		ssid: ssid || '[Hidden]',
-		bssid: bssid,
-		rssi: dv.getInt8(39),
-		auth: dv.getUint8(40),
-		chan: dv.getUint8(41)
-	});
-
-	if (incomingWifi.length >= expectedWifiCount) renderWifiList(incomingWifi);
+function getAuthName(enc) {
+	const map = { 2: 'WPA', 4: 'WPA2', 5: 'WEP', 7: 'Открытая', 8: 'WPA/WPA2' };
+	return map[enc] || 'Unknown';
 }
+
+function parseWiFiPacket(view) {
+	let offset = 0;
+	const count = view.getUint8(offset++);
+	const tbody = document.getElementById('wifi-list');
+	tbody.innerHTML = '';
+
+	const buffer = view.buffer;
+	const baseOffset = view.byteOffset;
+
+	for (let i = 0; i < count; i++) {
+		const mac = Array.from(new Uint8Array(buffer, baseOffset + offset, 6))
+			.map(b => b.toString(16).padStart(2, '0')).join(':');
+		offset += 6;
+		const chan = view.getUint8(offset++);
+		const enc = view.getUint8(offset++);
+		const rssi = view.getInt8(offset++);
+		const ssidLen = view.getUint8(offset++);
+		const ssid = new TextDecoder().decode(new Uint8Array(buffer, baseOffset + offset, ssidLen));
+		offset += ssidLen;
+
+		const tr = document.createElement('tr');
+		//tr.className = 'wifi-row';
+
+		const signalPercent = Math.min(100, Math.max(0, (rssi + 100) * 1.4));
+
+		tr.innerHTML = `
+            <td class="ps-3">${ssid || '<em>Скрыта</em>'}</td>
+            <td class="small text-muted">${mac}</td>
+            <td><small>${getAuthName(enc)}</small></td>
+            <td class="pe-3">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-secondary me-2">CH ${chan}</span>
+                    <div class="progress flex-grow-1" style="height:6px; min-width:60px">
+                        <div class="progress-bar ${rssi > -65 ? 'bg-success' : 'bg-warning'}" style="width:${signalPercent}%">
+                        </div>
+                    </div>
+                </div>
+            </td>`;
+		tbody.appendChild(tr);
+	}
+}
+
 
 // --- ВИЗУАЛИЗАЦИЯ ---
 
@@ -239,39 +263,63 @@ function renderSatBars(sats) {
 	}).join('');
 }
 
-function renderWifiList(nets) {
-	const tbody = document.getElementById('wifi-list');
-	nets.sort((a, b) => b.rssi - a.rssi);
-	tbody.innerHTML = nets.map(n => `<tr>
-        <td class="ps-3">${n.ssid}</td>
-        <td class="small text-muted">${n.bssid}</td>
-        <td><small>${n.auth}</small></td>
-        <td class="pe-3">
-            <div class="d-flex align-items-center">
-                <span class="badge bg-secondary me-2">CH ${n.chan}</span>
-                <div class="progress flex-grow-1" style="height:6px; min-width:60px">
-                    <div class="progress-bar ${n.rssi > -65 ? 'bg-success' : 'bg-warning'}" style="width:${Math.max(0, 100 + n.rssi * 1.2)}%"></div>
-                </div>
-            </div>
-        </td>
-    </tr>`).join('');
+// --- НАСТРОЙКИ И ФАЙЛЫ ---
+async function loadConfig() {
+	try {
+		const r = await fetch('/config');
+		const data = await r.json();
+		const f = document.getElementById('configForm');
+
+		// Заполняем поля по именам (name)
+		f.ssid.value = data.ssid;
+		f.pass.value = data.pass;
+		f.scan_interval.value = data.scan_interval;
+		f.min_acc.value = data.min_acc;
+		f.tzOffset.value = data.tz_offset;
+
+		// Чекбоксы заполняем через .checked
+		f.autoTZ.checked = data.auto_tz;
+		f.rotate_logs.checked = data.rotate_logs;
+
+		// Обновляем UI (если есть зависимые поля)
+		toggleTZUI();
+
+	} catch (err) {
+		console.error("Ошибка загрузки конфига:", err);
+	}
 }
 
-// --- НАСТРОЙКИ И ФАЙЛЫ ---
+async function rescanNetworks(btn) {
+	// 1. Блокируем кнопку
+	if (btn) btn.disabled = true;
 
-async function loadConfig() {
-	const r = await fetch('/config');
-	const buf = await r.arrayBuffer();
-	const dv = new DataView(buf);
-	const f = document.getElementById('configForm');
+	try {
+		const tbody = document.getElementById('wifi-list');
+		tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Сканирование...</td></tr>';
 
-	f.apSSID.value = new TextDecoder().decode(buf.slice(0, 32)).replace(/\0/g, '');
-	f.apPass.value = new TextDecoder().decode(buf.slice(32, 64)).replace(/\0/g, '');
-	f.logInterval.value = dv.getUint32(64, true);
-	f.minHDOP.value = dv.getFloat32(68, true).toFixed(2);
-	f.autoTZ.checked = dv.getUint8(73) === 1;
-	f.tzOffset.value = dv.getInt8(72);
-	toggleTZUI();
+		const response = await fetch('/ScanWiFi', { method: 'POST' });
+		const result = await response.text();
+
+		switch (result) {
+			case "OK":
+				// Тут можно запустить таймер или WebSocket ожидание результатов
+				break;
+			case "-1":
+				tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Ошибка запуска сканирования</td></tr>';
+				break;
+			default:
+				console.warn("Unknown response:", result);
+				break;
+		}
+
+	} catch (err) {
+		console.error("Ошибка сканирования:", err);
+	} finally {
+		// 2. Разблокируем кнопку обратно через пару секунд (чтобы не спамили)
+		setTimeout(() => {
+			if (btn) btn.disabled = false;
+		}, 1000);
+	}
 }
 
 function gpsToUnix(gpsSeconds, leapSeconds = 18) {
@@ -279,16 +327,20 @@ function gpsToUnix(gpsSeconds, leapSeconds = 18) {
 	return gpsSeconds + GPS_EPOCH_OFFSET - leapSeconds;
 }
 
-async function loadLogs() {
+async function loadLogs(btn) {
+	if (btn) btn.disabled = true;
+
 	try {
+		const tbody = document.getElementById('log-list');
+		tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Сканирование...</td></tr>';
+
 		const response = await fetch('/GetUsedBlocks');
 		const text = await response.text();
+		tbody.innerHTML = ''; // Очистить старые данные
 
 		if (!text) return; // Если список пуст
 
 		const pairs = text.split(',');
-		const tbody = document.getElementById('log-list');
-		tbody.innerHTML = ''; // Очистить старые данные
 
 		pairs.forEach(pair => {
 			const [id, ts] = pair.split('=');
@@ -303,6 +355,28 @@ async function loadLogs() {
 
 	} catch (e) {
 		console.error("Ошибка загрузки блоков:", e);
+	} finally {
+		// 2. Разблокируем кнопку обратно через пару секунд (чтобы не спамили)
+		setTimeout(() => {
+			if (btn) btn.disabled = false;
+		}, 1000);
+	}
+}
+
+async function eraseFlash(btn) {
+	if (btn) btn.disabled = true;
+
+	try {
+		const tbody = document.getElementById('log-list');
+		const response = await fetch('/EraseFlash', { method: 'POST' });
+		const result = await response.text();
+		tbody.innerHTML = '';
+	} catch (err) {
+		console.error("Ошибка:", err);
+	} finally {
+		setTimeout(() => {
+			if (btn) btn.disabled = false;
+		}, 5000);
 	}
 }
 
@@ -326,7 +400,7 @@ function toggleTZUI() {
 }
 
 function setBrowserTZ() {
-	document.getElementById('tzSelect').value = Math.round(-new Date().getTimezoneOffset() / 60);
+	document.getElementById('tzSelect').value = Math.round(-new Date().getTimezoneOffset());
 }
 
 function updateBlockButtons() {
@@ -363,10 +437,25 @@ async function loadTimezones(lang = 'en') {
 
 			cities.forEach(city => {
 				const el = document.createElement('option');
-				el.value = min * 60; // Передаем на ESP секунды
+				el.value = min;
 				el.textContent = `${region}/${city} ${offsetStr}`;
 				select.appendChild(el);
 			});
 		}
 	}
+}
+
+function toggleAllBlocks(mainBox) {
+	// Находим все чекбоксы внутри тела таблицы
+	const checkboxes = document.querySelectorAll('#log-list input[type="checkbox"]');
+
+	checkboxes.forEach(cb => {
+		cb.checked = mainBox.checked;
+
+		// Если вы используете стили для выделенных строк (например, Bootstrap table-active)
+		const row = cb.closest('tr');
+		if (row) {
+			row.classList.toggle('table-active', cb.checked);
+		}
+	});
 }

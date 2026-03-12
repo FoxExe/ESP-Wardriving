@@ -42,7 +42,6 @@ const uint8_t GPS_ON[] = {
 
 unsigned long lastScanMillis = 0;
 unsigned long lastBatteryUpdate = 0;
-bool readyToSave = false;
 
 #pragma pack(push, 1)
 struct ExtendedReport {
@@ -128,7 +127,7 @@ void updateUI() {
 	screen.line(100, 0, 101, 0, OLED_FILL);
 
 	// Battery charge text
-	screen.setCursorXY(103, 0);
+	screen.setCursorXY(104, 0);
 	screen.printf("%3d%%", battery.getPercentage());
 
 	// ========= GRAPH 1 =========
@@ -200,15 +199,7 @@ void updateUI() {
 
 	// Draw bars
 	int8_t scanned = WiFi.scanComplete();
-	if (WiFi.softAPgetStationNum() > 0) {
-		// Pause icon
-		screen.rect(122, 9, 123, 14, OLED_FILL);
-		screen.rect(125, 9, 126, 14, OLED_FILL);
-		//screen.rect(78, 8, 127, 31, OLED_CLEAR);
-		//screen.setCursorXY(90, 16);
-		//screen.print(F("PAUSE"));
-	}
-	else if (scanned >= 0) {
+	if (scanned >= 0) {
 		screen.rect(78, 8, 127, 31, OLED_CLEAR);
 		for (uint8_t i = 0; i < scanned; i++) {
 			uint8_t h = map(constrain(WiFi.RSSI(i), -100, -50), -100, -50, 0, 21);
@@ -221,13 +212,19 @@ void updateUI() {
 			if (i > MAX_APS_BARS) break; // max 25 bars
 		}
 	}
-	else if (scanned == -1) {
-		//screen.circle(122, 10, 2, OLED_FILL);
+	if (scanned == WIFI_SCAN_RUNNING) {
+		screen.rect(119, 9, 127, 15, OLED_CLEAR);
+		// Reload icon
+		screen.circle(123, 12, 3, OLED_STROKE);
+		screen.line(120, 9, 126, 15, OLED_CLEAR);
+		screen.line(119, 12, 121, 12, OLED_FILL);
+		screen.line(125, 12, 127, 12, OLED_FILL);
+
 		// Play icon (triangle)
-		screen.line(124, 9, 126, 11, OLED_FILL);
-		screen.line(126, 11, 124, 13, OLED_FILL);
-		screen.line(124, 13, 124, 9, OLED_FILL);
-		screen.dot(125, 11, OLED_FILL);
+		//screen.line(124, 9, 126, 11, OLED_FILL);
+		//screen.line(126, 11, 124, 13, OLED_FILL);
+		//screen.line(124, 13, 124, 9, OLED_FILL);
+		//screen.dot(125, 11, OLED_FILL);
 
 		/*
 		screen.setScale(2);
@@ -235,6 +232,15 @@ void updateUI() {
 		screen.print("SCAN"); // max 4 chars!
 		screen.setScale(1);
 		*/
+	}
+	else if (WiFi.softAPgetStationNum() > 0) {
+		screen.rect(119, 9, 127, 15, OLED_CLEAR);
+		// Pause icon
+		screen.rect(121, 9, 122, 15, OLED_FILL);	
+		screen.rect(124, 9, 125, 15, OLED_FILL);
+		//screen.rect(78, 8, 127, 31, OLED_CLEAR);
+		//screen.setCursorXY(90, 16);
+		//screen.print(F("PAUSE"));
 	}
 
 	// ========= OTHER   =========
@@ -281,6 +287,47 @@ void sendStats() {
 	free(buff);
 }
 
+#pragma pack(push, 1)
+struct APDataPacket {
+	uint8_t mac[6];
+	uint8_t chan;
+	uint8_t enc;
+	uint8_t rssi;
+	uint8_t ssid_len;
+	//uint8_t ssid[32]; // dynamic string
+};
+#pragma pack(pop)
+
+void sendWiFiScanResult() {
+	int8_t results = WiFi.scanComplete();
+	if (results < 0) { return; }
+
+	// TODO: Send only if changed. Or change it to HTTP_GET request.
+
+	std::vector<uint8_t> buffer;
+	buffer.reserve(2 + (results * (sizeof(APDataPacket) + 32)));
+
+	buffer.push_back(0x02);
+	buffer.push_back((uint8_t)results);
+
+	for (int8_t i = 0; i < results; i++) {
+		APDataPacket p;
+		// MAC Address
+		memcpy(p.mac, WiFi.BSSID(i), 6);
+		p.chan = WiFi.channel(i);
+		p.enc = WiFi.encryptionType(i);
+		p.rssi = (uint8_t)WiFi.RSSI(i);
+
+		String ssid = WiFi.SSID(i);
+		p.ssid_len = (ssid.length() > 32) ? 32 : ssid.length();
+
+		uint8_t* pReg = (uint8_t*)&p;
+		for (size_t j = 0; j < sizeof(APDataPacket); j++) buffer.push_back(pReg[j]);
+		for (size_t j = 0; j < p.ssid_len; j++) buffer.push_back(ssid[j]);
+	}
+
+	web.sendWSData(buffer.data(), buffer.size());
+}
 
 void setup() {
 	// Fix internal timer
@@ -435,16 +482,18 @@ void loop() {
 
 		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL && WiFi.softAPgetStationNum() == 0) {
 			lastScanMillis = millis();
+			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
+				logger.storeRecord(current);
+			}
 			WiFi.scanDelete();
 			WiFi.scanNetworks(true, true); // Асинхронно
-			readyToSave = (fix.valid.location && current.accuracy <= cfg.min_hdop);
 		}
 
 		updateUI();
 
 		// send to browser [current] + [reportExt]
 		sendStats();
-		// TODO: Send to browser when logger started new block (for auto update downloads table)
+		sendWiFiScanResult(); // Send to browser. Can be requested by user.
 
 		// DEBUG
 		// Warning: Too heavy! Can crash (stack overflow)
@@ -461,12 +510,6 @@ void loop() {
 
 	if (WiFi.scanComplete() >= 0) {
 		current.ap_count = WiFi.scanComplete();
-		// TODO: send to browser [wifi info]
-
-		if (readyToSave) {
-			logger.storeRecord(current);
-			readyToSave = false;
-		}
 	}
 
 	web.update();
