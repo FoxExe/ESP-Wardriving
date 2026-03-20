@@ -68,9 +68,6 @@ private:
 	uint16_t align4(uint16_t addr) { return (addr + 3) & ~3; }
 	void addToCache(uint8_t* mac, uint16_t offset);
 	uint16_t getOffsetFromCache(uint8_t* mac);
-	bool prepareNextBlock();
-	void scanCurrentBlock();        // Восстановление ptrTop/ptrBottom при старте
-
 public:
 	Logger(uint8_t csPin);
 
@@ -84,6 +81,7 @@ public:
 	void requestErase() { _requestedErase = true; }
 	bool needErase() { return _requestedErase; }
 	void eraseFlash(std::function<void(int)> onProgress);
+	bool prepareNextBlock();
 
 	// Управление и статистика
 	void setRotation(bool enable) { _rotateLogs = enable; }

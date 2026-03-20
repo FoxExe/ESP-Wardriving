@@ -406,9 +406,9 @@ void loop() {
 		gpsPort.write(GPS_ON, sizeof(GPS_ON));
 	}
 
-	if (btn.hasClicks(2)) {
-		Serial.println(F("Двойной клик!"));
-	}
+	//if (btn.hasClicks(2)) {
+	//	Serial.println(F("Двойной клик!"));
+	//}
 
 	if (btn.hold()) {
 		Serial.println(F("Удержание 1 сек!"));
@@ -416,9 +416,11 @@ void loop() {
 		gpsPort.write(GPS_OFF, sizeof(GPS_OFF));
 	}
 
+	// DEBUG
 	//if (gpsPort.available()) {
 	//	Serial.write(gpsPort.read());
 	//}
+
 	while (gpsPort.available()) {
 		char c = gpsPort.read();
 		static char buffer[100];
@@ -498,10 +500,9 @@ void loop() {
 			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
 				logger.storeRecord(current);
 			}
-			if (!web.isBusy()) {
-				WiFi.scanDelete();
-				WiFi.scanNetworks(true, true); // Асинхронно
-			}
+			while (web.isBusy()) { yield(); delay(10); }
+			WiFi.scanDelete();
+			WiFi.scanNetworks(true, true); // Асинхронно
 		}
 
 		updateUI();

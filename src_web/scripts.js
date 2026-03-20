@@ -10,9 +10,6 @@ window.onload = () => {
 	loadLogs();
 	loadTimezones('ru');
 
-	// Подсказки Bootstrap
-	document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(t => new bootstrap.Tooltip(t));
-
 	document.getElementById('configForm').onsubmit = async (e) => {
 		e.preventDefault();
 		const formData = new FormData(e.target);
@@ -56,6 +53,9 @@ window.onload = () => {
 			main.indeterminated = (checked.length > 0 && checked.length < all.length);
 		}
 	});
+
+	// Подсказки Bootstrap (работает весьма криво)
+	//document.querySelectorAll('[data-toggle="tooltip"]').forEach(t => new bootstrap.Tooltip(t));
 };
 
 function initWebSocket() {
@@ -93,6 +93,32 @@ function initWebSocket() {
 		updateConnStatus(false);
 		wsReconnectTimer = setTimeout(initWebSocket, 3000);
 	};
+}
+
+function showAlert(message, type = 'info') {
+	const container = document.querySelector('body > .container');
+	if (!container) return;
+
+	const icons = {
+		success: 'icon-success',
+		danger: 'icon-warning',
+		warning: 'icon-warning',
+		info: 'icon-info'
+	};
+
+	const alert = document.createElement('div');
+	alert.className = `alert alert-${type} alert-dismissible fade show d-flex align-items-center`;
+	alert.setAttribute('role', 'alert');
+
+	alert.innerHTML = `
+		<svg class="bi flex-shrink-0 me-2" width="20" height="20" role="img">
+			<use xlink:href="#${icons[type] || 'icon-info'}"/>
+		</svg>
+		<div>${message}</div>
+		<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+	`;
+
+	container.prepend(alert);
 }
 
 function updateConnStatus(online) {
@@ -283,7 +309,8 @@ async function loadConfig() {
 		toggleTZUI();
 
 	} catch (err) {
-		console.error("Ошибка загрузки конфига:", err);
+		showAlert("Ошибка: " + err, "danger")
+		console.error("Ошибка:", err);
 	}
 }
 
@@ -306,12 +333,14 @@ async function rescanNetworks(btn) {
 				tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Ошибка запуска сканирования</td></tr>';
 				break;
 			default:
+				showAlert("HTTP Error: " + result, "warning")
 				console.warn("Unknown response:", result);
 				break;
 		}
 
 	} catch (err) {
-		console.error("Ошибка сканирования:", err);
+		showAlert("Ошибка: " + err, "danger")
+		console.error("Ошибка:", err);
 	} finally {
 		// 2. Разблокируем кнопку обратно через пару секунд (чтобы не спамили)
 		setTimeout(() => {
@@ -331,7 +360,7 @@ async function loadLogs(btn) {
 
 	try {
 		const tbody = document.getElementById('log-list');
-		tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Сканирование...</td></tr>';
+		tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Обновляю...</td></tr>';
 
 		const response = await fetch('/GetUsedBlocks');
 		const text = await response.text();
@@ -352,13 +381,31 @@ async function loadLogs(btn) {
 			document.getElementById('log-list').insertAdjacentHTML('beforeend', row);
 		});
 
-	} catch (e) {
-		console.error("Ошибка загрузки блоков:", e);
+	} catch (err) {
+		showAlert("Ошибка: " + err, "danger")
+		console.error("Ошибка:", err);
 	} finally {
 		// 2. Разблокируем кнопку обратно через пару секунд (чтобы не спамили)
 		setTimeout(() => {
 			if (btn) btn.disabled = false;
 		}, 1000);
+	}
+}
+
+async function skipBlock(btn) {
+	if (btn) btn.disabled = true;
+
+	try {
+		const response = await fetch('/SkipBlock', { method: 'POST' });
+		const result = await response.text();
+		if (result != "OK") { throw new Error(result); }
+	} catch (err) {
+		showAlert("Ошибка: " + err, "danger")
+		console.error("Ошибка:", err);
+	} finally {
+		setTimeout(() => {
+			if (btn) btn.disabled = false;
+		}, 5000);
 	}
 }
 
@@ -369,8 +416,10 @@ async function eraseFlash(btn) {
 		const tbody = document.getElementById('log-list');
 		const response = await fetch('/EraseFlash', { method: 'POST' });
 		const result = await response.text();
-		tbody.innerHTML = '';
+		if (result != "OK") { throw new Error(result); }
+		tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">- пусто -</td></tr>';
 	} catch (err) {
+		showAlert("Ошибка: " + err, "danger")
 		console.error("Ошибка:", err);
 	} finally {
 		setTimeout(() => {

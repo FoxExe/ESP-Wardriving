@@ -18,6 +18,16 @@
 	background-color: #dee2e6 !important;
 }
 
+.progress:has(#flash-bar, #ram-bar) {
+	height: 8px;
+}
+
+small:has(#sys-ram-max) {
+	position: relative;
+	top: -6px;
+	font-size: 12px;
+}
+
 /* Статус-индикатор (точка в хедере) */
 .status-dot {
 	width: 12px;
@@ -36,7 +46,10 @@
 #sat-chart {
 	background: rgba(0, 0, 0, 0.03);
 	border-radius: 4px;
-	padding: 10px 5px;
+	height: 100px;
+	gap: 4px;
+	border-bottom: 2px solid #dee2e6;
+	padding: 0 5px 5px 5px;
 }
 
 .sat-bar-wrapper {

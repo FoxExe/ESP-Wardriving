@@ -221,6 +221,11 @@ public:
 			request->send(200, "text/plain", "OK");
 			});
 
+		_server.on("/SkipBlock", HTTP_POST, [this](AsyncWebServerRequest* request) {
+			// Note: We need pause main program or we got brocken gps point.
+			request->send(200, "text/plain", logger.prepareNextBlock() ? "OK" : "ERROR");
+			});
+
 		_server.begin();
 	}
 
@@ -238,7 +243,7 @@ public:
 	void update() {
 		_ws.cleanupClients();
 		if (_apChanged) {
-			delay(1000); // wait until browser get answer
+			delay(1000); // wait until browser rewceived answer
 			WiFi.softAP(cfg.ssid, cfg.pass);
 			_apChanged = false;
 		}

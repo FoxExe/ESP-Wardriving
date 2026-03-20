@@ -32,13 +32,13 @@ def parse_log(filename):
 		while True:
 			pos = f.tell()
 			mac, ch_enc, len = S_AP.unpack(f.read(S_AP.size))
-			if ch_enc == 0xFF or len == 0xFF:
+			if len == 0xFF:
 				break
-
 			ch = (ch_enc >> 4) & 0x0F
 			enc = ch_enc & 0x0F
 			f.seek(f.tell() - S_AP.size - len)
-			ssid = f.read(len).decode().strip('\0').strip()
+			ssid = f.read(len).decode('utf-8').strip('\0').strip()
+			print(f"0x{pos:08X}:", end=" ")
 			for c in mac:
 				print(f"{c:02X}", end=" ")
 			print(f"- {ENC_TYPES.get(enc, "UNKNOWN"):>8s} @ {ch:2d} \"{ssid}\" ")
@@ -75,4 +75,5 @@ def parse_log(filename):
 
 
 if __name__ == "__main__":
-	parse_log("log_dump.bin")
+	# NOTE: python.exe -X utf8 log_reader.py > log_dump_8.txt
+	parse_log("log_dump_8.bin")

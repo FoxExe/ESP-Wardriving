@@ -75,7 +75,6 @@ bool Logger::begin() {
 			if (tempGps.timestamp < MIN_VALID_TS || tempGps.timestamp == 0xFFFFFFFF) break;
 
 			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.ap_count * sizeof(AP_Signal_Record));
-			//_ptrTop = align4(_ptrTop);
 		}
 
 		// Restore AP_Info data
@@ -114,7 +113,6 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 
 	uint32_t gpsSpace = sizeof(GPS_Position_Info) + (networksFound * sizeof(AP_Signal_Record));
 
-	//if (align4(_ptrTop + gpsSpace) >= (_ptrBottom - newApSpace)) {
 	if (_ptrTop + gpsSpace >= (_ptrBottom - newApSpace)) {
 		if (!prepareNextBlock()) return false;
 		return storeRecord(gps);
@@ -127,7 +125,10 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 
 		AP_Info info;
 		memcpy(info.mac, WiFi.BSSID(idx), 6);
-		info.channel_enc = (WiFi.channel(idx) << 4) | (uint8_t)WiFi.encryptionType(idx);
+		uint8_t ch = WiFi.channel(idx);
+		uint8_t enc = WiFi.encryptionType(idx);
+		if (enc > 0x0E) enc = 0; //(Yes, this happens from time to time, encode can return 0xFF...
+		info.channel_enc = ((ch & 0x0F) << 4) | (enc & 0x0F);
 		info.ssid_len = sLen;
 		flashWriteStruct(_flash, _currentBlockAddr + _ptrBottom, info);
 		addToCache(info.mac, _ptrBottom);
@@ -149,7 +150,6 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		_ptrTop += sizeof(AP_Signal_Record);
 	}
 
-	//_ptrTop = align4(_ptrTop);
 	_pointsSaved++;
 	return true;
 }
@@ -159,23 +159,23 @@ bool Logger::prepareNextBlock() {
 	if (nextAddr >= _flashSize) nextAddr = 0;
 
 	// Сначала проверяем, можно ли использовать следующий блок
-	if (!_rotateLogs) {
-		uint16_t nextMagic;
-		// Читаем только первые 2 байта (Magic)
-		_flash.readByteArray(nextAddr, (uint8_t*)&nextMagic, 2);
-		if (nextMagic == BLOCK_HEADER_MAGIC) {
-			_isFull = true;
-			return false;
-		}
+	BlockHeader bh;
+	flashReadStruct(_flash, nextAddr, bh);
+
+	if (bh.magic == BLOCK_HEADER_MAGIC && bh.timestamp != 0xFFFFFFFF && !_rotateLogs) {
+		_isFull = true;
+		return false;
 	}
 
-	// Если всё ок — переходим на новый адрес и стираем
+	// Switch to new block
 	_currentBlockAddr = nextAddr;
-	if (!_flash.eraseBlock64K(_currentBlockAddr)) return false;
 
-	// Инициализация заголовка
-	uint16_t magic = BLOCK_HEADER_MAGIC;
-	_flash.writeWord(_currentBlockAddr, magic);
+	// Erase only if not empty ()
+	if (bh.magic != BLOCK_HEADER_MAGIC || bh.timestamp != 0xFFFFFFFF) {
+		if (!_flash.eraseBlock64K(_currentBlockAddr)) return false;
+		uint16_t magic = BLOCK_HEADER_MAGIC;
+		_flash.writeWord(_currentBlockAddr, magic);
+	}
 
 	_blockCache.clear();
 	_ptrTop = 2; // skip Magic
@@ -240,7 +240,6 @@ void Logger::getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound) {
 	//Serial.println("> getUsedBlockIDs()");
 	for (uint32_t i = 0; i < blocksTotal(); i++) {
 		BlockHeader bh;
-
 		flashReadStruct(_flash, i * DATA_BLOCK_SIZE, bh);
 
 		//Serial.printf(">> #%3d: %04X %d\n", i, bh.magic, bh.timestamp);
