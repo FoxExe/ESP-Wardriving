@@ -102,7 +102,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 	if (networksFound < 0) return false;
 	gps.ap_count = networksFound; // Just to be sure its same.
 
-	uint32_t newApSpace = 0;
+	uint16_t newApSpace = 0;
 	std::vector<int> newNets;
 	for (int i = 0; i < networksFound; i++) {
 		if (getOffsetFromCache(WiFi.BSSID(i)) == 0) {
@@ -111,9 +111,9 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		}
 	}
 
-	uint32_t gpsSpace = sizeof(GPS_Position_Info) + (networksFound * sizeof(AP_Signal_Record));
+	uint16_t gpsSpace = sizeof(GPS_Position_Info) + (networksFound * sizeof(AP_Signal_Record));
 
-	if (_ptrTop + gpsSpace >= (_ptrBottom - newApSpace)) {
+	if ((gpsSpace + newApSpace) > (_ptrBottom - _ptrTop)) {
 		if (!prepareNextBlock()) return false;
 		return storeRecord(gps);
 	}
@@ -127,7 +127,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 		memcpy(info.mac, WiFi.BSSID(idx), 6);
 		uint8_t ch = WiFi.channel(idx);
 		uint8_t enc = WiFi.encryptionType(idx);
-		if (enc > 0x0E) enc = 0; //(Yes, this happens from time to time, encode can return 0xFF...
+		if (enc > 0x0E) enc = 0;  // This happens from time to time - encode can return 0xFF...
 		info.channel_enc = ((ch & 0x0F) << 4) | (enc & 0x0F);
 		info.ssid_len = sLen;
 		flashWriteStruct(_flash, _currentBlockAddr + _ptrBottom, info);

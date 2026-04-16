@@ -315,8 +315,6 @@ void sendWiFiScanResult() {
 	int8_t results = WiFi.scanComplete();
 	if (results < 0) { return; }
 
-	// TODO: Send only if changed. Or change it to HTTP_GET request.
-
 	std::vector<uint8_t> buffer;
 	buffer.reserve(2 + (results * (sizeof(APDataPacket) + 32)));
 
@@ -485,7 +483,7 @@ void loop() {
 
 		current.bat_charge = battery.getPercentage();
 
-		// TODO: Used only in browser, store as ExtendedInfo structure
+		// NOTE: Used only in browser, store as ExtendedInfo structure
 		reportExt.blocks_total = logger.blocksTotal();
 		reportExt.blocks_used = logger.blocksUsed();
 		reportExt.heap_free = ESP.getFreeHeap();

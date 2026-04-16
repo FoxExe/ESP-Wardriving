@@ -131,10 +131,17 @@ public:
 
 		_server.on("/download", HTTP_GET, [this](AsyncWebServerRequest* request) {
 			WiFi.scanDelete(); // Останавливаем сканирование, чтобы не мешало
+			if (_busy) {
+				request->send(503, "text/plain", "Server Busy");
+				return;
+			}
 			_busy = true;
 
 			// Используем умный указатель, чтобы не утекла память при обрыве связи
 			auto requestedBlocks = std::make_shared<std::vector<uint32_t>>();
+			auto busyGuard = std::shared_ptr<void>(nullptr, [this](void*) {
+				this->_busy = false;
+				});
 
 			int params = request->params();
 			for (int i = 0; i < params; i++) {
@@ -150,11 +157,12 @@ public:
 			if (requestedBlocks->empty()) {
 				request->send(400, "text/plain", "No valid blocks");
 				return;
+				// busyGuard was destroyed after return, _busy -> false
 			}
 
+			// Total data size
 			size_t totalSize = requestedBlocks->size() * DATA_BLOCK_SIZE;
 
-			// Передаем размер вторым аргументом -> библиотека сама поставит Content-Length
 			AsyncWebServerResponse* response = request->beginResponse("application/octet-stream", totalSize,
 				[this, requestedBlocks](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
 
@@ -166,10 +174,8 @@ public:
 					uint32_t flashBlockId = (*requestedBlocks)[currentBlockIdxInList];
 
 					size_t remainingInBlock = DATA_BLOCK_SIZE - offsetInBlock;
-					// Читаем маленькую порцию (обычно ~1.4KB), которую просит maxLen
 					size_t lenToRead = std::min(maxLen, remainingInBlock);
 
-					// Блокирующее чтение маленького кусочка из SPI (безопасно для WDT)
 					if (logger.getBlockPart(flashBlockId, offsetInBlock, buffer, lenToRead)) {
 						return lenToRead;
 					}
@@ -177,11 +183,15 @@ public:
 					return 0; // Ошибка чтения — прерываем передачу
 				});
 
-			response->addHeader("Content-Disposition", "attachment; filename=\"log_dump.bin\"");
-			request->send(response);
-			_busy = false;
-			});
+			// File name
+			String fileName = "log_" + String(requestedBlocks->front());
+			if (requestedBlocks->size() > 1) fileName += "-" + String(requestedBlocks->back());
+			fileName += ".bin";
 
+			response->addHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+			request->send(response);
+
+			});
 
 		_server.on("/GetUsedBlocks", HTTP_GET, [this](AsyncWebServerRequest* request) {
 			_busy = true;
