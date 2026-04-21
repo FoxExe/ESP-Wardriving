@@ -236,6 +236,12 @@ public:
 			request->send(200, "text/plain", logger.prepareNextBlock() ? "OK" : "ERROR");
 			});
 
+		_server.on("/reboot", HTTP_POST, [this](AsyncWebServerRequest* request) {
+			request->send(200, "text/plain", "Rebooting...");
+			DefaultHeaders::Instance().addHeader("Connection", "close");
+			ESP.restart();
+			});
+
 		_server.begin();
 	}
 

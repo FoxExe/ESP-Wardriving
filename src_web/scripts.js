@@ -157,7 +157,7 @@ function parseStatusPacket(dv) {
 	const alt = dv.getInt16(offset, true); offset += 2;
 	const hdop = dv.getUint16(offset, true); offset += 2;
 	const battery = dv.getUint8(offset); offset += 1;
-	const ap_count = dv.getUint8(offset); offset += 1;
+	const ap_status = dv.getInt8(offset); offset += 1;
 
 	// Extended info entry
 	const blocksTotal = dv.getUint32(offset, true); offset += 4;
@@ -373,13 +373,16 @@ async function loadLogs(btn) {
 		pairs.forEach(pair => {
 			const [id, ts] = pair.split('=');
 			const row = `<tr>
-                <td class="ps-3"><input type="checkbox" class="form-check-input block-checkbox" value="${id}" onchange="updateBlockButtons()"/></td>
-                <td><a href="/download?id=${id}" class="fw-bold text-decoration-none">Блок #${id}</a></td>
-                <td>64 KB</td>
-                <td class="log-time pe-3" data-ts="${ts}">${formatDate(gpsToUnix(ts))}</td>
-            </tr>`;
+				<td class="ps-3"><input type="checkbox" class="form-check-input block-checkbox" value="${id}" onchange="updateBlockButtons()"/></td>
+				<td><a href="/download?id=${id}" class="fw-bold text-decoration-none">Блок #${id}</a></td>
+				<td>64 KB</td>
+				<td class="log-time pe-3" data-ts="${ts}">${formatDate(gpsToUnix(ts))}</td>
+			</tr>`;
 			document.getElementById('log-list').insertAdjacentHTML('beforeend', row);
 		});
+
+		document.getElementById('logsCheckbox').checked = false;
+		updateBlockButtons();
 
 	} catch (err) {
 		showAlert("Ошибка: " + err, "danger")
@@ -452,12 +455,16 @@ function setBrowserTZ() {
 }
 
 function updateBlockButtons() {
-	document.getElementById('btn-download-many').disabled = !document.querySelectorAll('.block-chk:checked').length;
+	const selectedCount = document.querySelectorAll('.block-checkbox:checked').length;
+	document.getElementById('btn-download-many').disabled = selectedCount === 0;
 }
 
 function downloadSelected() {
-	const ids = Array.from(document.querySelectorAll('.block-chk:checked')).map(c => `id=${c.value}`).join('&');
-	window.location.href = `/block?${ids}`;
+	const selected = document.querySelectorAll('.block-checkbox:checked');
+	if (selected.length === 0) return;
+
+	const ids = Array.from(selected).map(c => `id=${c.value}`).join('&');
+	window.location.href = `/download?${ids}`;
 }
 
 async function apiPost(url) {
@@ -494,16 +501,15 @@ async function loadTimezones(lang = 'en') {
 }
 
 function toggleAllBlocks(mainBox) {
-	// Находим все чекбоксы внутри тела таблицы
-	const checkboxes = document.querySelectorAll('#log-list input[type="checkbox"]');
+	const checkboxes = document.querySelectorAll('#log-list .block-checkbox');
 
 	checkboxes.forEach(cb => {
 		cb.checked = mainBox.checked;
-
-		// Если вы используете стили для выделенных строк (например, Bootstrap table-active)
 		const row = cb.closest('tr');
 		if (row) {
 			row.classList.toggle('table-active', cb.checked);
 		}
 	});
+
+	updateBlockButtons();
 }

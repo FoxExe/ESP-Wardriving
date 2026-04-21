@@ -38,7 +38,7 @@ struct GPS_Position_Info {
 	int16_t alt;
 	uint16_t accuracy;
 	uint8_t bat_charge;
-	uint8_t ap_count;
+	int8_t ap_status;
 };
 
 struct CacheEntry {

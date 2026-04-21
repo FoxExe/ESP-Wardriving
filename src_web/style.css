@@ -114,7 +114,21 @@ small:has(#sys-ram-max) {
 	}
 }
 
-/* Плавный переход цвета для батарейки */
+/* Battery color change */
 .transition-color {
 	transition: color 0.5s ease-in-out;
+}
+
+/* Collapsed blocks */
+h6[data-bs-toggle="collapse"]::after {
+	content: "▼";
+	display: inline-block;
+	margin-left: 10px;
+	font-size: 0.7rem;
+	transition: transform 0.3s;
+	vertical-align: middle;
+}
+
+h6[data-bs-toggle="collapse"].collapsed::after {
+	transform: rotate(-90deg);
 }

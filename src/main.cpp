@@ -6,6 +6,8 @@
 #include <EncButton.h>
 #include <time.h>
 
+#include <LwipDhcpServer.h>
+
 #include "Logger.h"
 #include "Battery.h"
 #include "Settings.h"
@@ -340,6 +342,15 @@ void sendWiFiScanResult() {
 	web.sendWSData(buffer.data(), buffer.size());
 }
 
+void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options) {
+	// Формат опции 121: 
+	// [Маска] [Сеть (без нулей)] [IP шлюза]
+	// Для 192.168.4.0/24 через 192.168.4.1 это:
+	// 18 (24 маска) + C0 A8 04 (192.168.4) + C0 A8 04 01 (192.168.4.1)
+	uint8_t route_data[] = { 0x18, 0xC0, 0xA8, 0x04, 0xC0, 0xA8, 0x04, 0x01 };
+	options.add(121, route_data, sizeof(route_data));
+}
+
 void setup() {
 	// Fix internal timer
 	struct timeval tv = { .tv_sec = 946684800, .tv_usec = 0 };
@@ -382,6 +393,7 @@ void setup() {
 	WiFi.setAutoConnect(false); // fix "-1" scan status after boot
 	WiFi.mode(WIFI_AP_STA);
 	WiFi.softAP(cfg.ssid, cfg.pass);
+	WiFi.softAPDhcpServer().onSendOptions(onDhcpOptions);  // Prioritize network
 
 	// Web server / web interface
 	draw_loading_screen(F("Web..."));
@@ -482,6 +494,7 @@ void loop() {
 		}
 
 		current.bat_charge = battery.getPercentage();
+		current.ap_status = WiFi.scanComplete();
 
 		// NOTE: Used only in browser, store as ExtendedInfo structure
 		reportExt.blocks_total = logger.blocksTotal();
@@ -495,12 +508,12 @@ void loop() {
 		// && WiFi.softAPgetStationNum() == 0
 		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
 			lastScanMillis = millis();
+			while (web.isBusy()) { yield(); delay(10); }
 			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
 				logger.storeRecord(current);
+				WiFi.scanDelete();
+				WiFi.scanNetworks(true, true); // Асинхронно
 			}
-			while (web.isBusy()) { yield(); delay(10); }
-			WiFi.scanDelete();
-			WiFi.scanNetworks(true, true); // Асинхронно
 		}
 
 		updateUI();
@@ -520,10 +533,6 @@ void loop() {
 		Serial.printf(" | LAT: %9.5f LON: %10.5f ALT: %7.4f HDOP: %7.4f ACC: %3d SATS: %2d/%2d", fix.latitude(), fix.longitude(), fix.altitude(), (float)(fix.hdop / 1000), hdopToAccuracy(fix.hdop), fix.satellites, gps.sat_count);
 		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
 		Serial.println();
-	}
-
-	if (WiFi.scanComplete() >= 0) {
-		current.ap_count = WiFi.scanComplete();
 	}
 
 	web.update();

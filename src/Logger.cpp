@@ -74,7 +74,7 @@ bool Logger::begin() {
 
 			if (tempGps.timestamp < MIN_VALID_TS || tempGps.timestamp == 0xFFFFFFFF) break;
 
-			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.ap_count * sizeof(AP_Signal_Record));
+			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.ap_status * sizeof(AP_Signal_Record));
 		}
 
 		// Restore AP_Info data
@@ -100,7 +100,7 @@ bool Logger::storeRecord(GPS_Position_Info& gps) {
 	int networksFound = WiFi.scanComplete();
 	// If there is no WiFi info available
 	if (networksFound < 0) return false;
-	gps.ap_count = networksFound; // Just to be sure its same.
+	gps.ap_status = networksFound; // Just to be sure its same.
 
 	uint16_t newApSpace = 0;
 	std::vector<int> newNets;

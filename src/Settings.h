@@ -11,7 +11,7 @@ struct ConfigData {
 	char ssid[32] = "GPS_Tracker";
 	char pass[64] = "testtest";
 	uint16_t scan_interval = 10;	// Секунд
-	uint16_t min_acc = 20;			// Метров (acciracy, not gps hdop!)
+	uint16_t min_acc = 20;			// Метров (accuracy, not gps hdop!)
 	int16_t tz_offset = 300;		// минуты, 300=Екатеринбург, 180=Москва
 	bool auto_tz = false;			// Автообнаружение, на основе текущих координат по меридианам (долго и неточно)
 	bool rotate_logs = true;
