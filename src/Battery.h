@@ -6,7 +6,7 @@
 // BATT_DIVIDER_K = "Вольт на батарее" / "Вольт на пине ADC-0"
 
 #define TURNOFF_THRESHOLD 1  // turn off at this percent
-#define BATT_DIVIDER_K 5.5
+#define BATT_DIVIDER_K 5.1   // ~5.5 for ESP-12E, ~5.1 for ESP-07S
 #define BATT_REF_V 1.0
 #define ADC_MAX 1023.0
 #define BATT_SMOOTH 0.02
