@@ -3,6 +3,10 @@ import sys
 import os
 from datetime import datetime
 
+
+LOG_DUMP = "log_107-108.bin"
+
+
 NEOGPS_EPOCH = 946684800
 BLOCK_SIZE = 64 * 1024
 MAGIC = 0xDDCC
@@ -21,6 +25,14 @@ ENC_TYPES = {
 	8: 'WPA/WPA2'
 }
 
+
+def hex_string(mac: bytes, separator: str = ":"):
+	lines = []
+	for c in mac:
+		lines.append(f"{c:02X}")
+	return separator.join(lines)
+
+
 if __name__ == "__main__":
 	# NOTE: If not work, try this:
 	# python.exe -X utf8 log_reader.py > log_dump_8.txt
@@ -30,12 +42,89 @@ if __name__ == "__main__":
 	sys.stdout.reconfigure(encoding='utf-8')
 	sys.stderr.reconfigure(encoding='utf-8')
 
-	with open("log_107-108.bin", "rb") as f:
-		header = S_HEAD.unpack(f.read(S_HEAD.size))[0]
-		if header != MAGIC:
-			print(f"Wrong file header ({header:04X})!")
+	with open(LOG_DUMP, "rb") as f:
+		f.seek(0, os.SEEK_END)
+		file_size = f.tell()
+		f.seek(0)
+
+		if file_size < BLOCK_SIZE or file_size % BLOCK_SIZE != 0:
+			print("Wrong file size!")
 			exit(1)
 
+		stats = {}
+
+		for blk_id in range(file_size // BLOCK_SIZE):
+			blk_start = blk_id * BLOCK_SIZE
+			f.seek(blk_start)
+
+			gps_cnt = 0
+			aps = {}
+
+			header = S_HEAD.unpack(f.read(S_HEAD.size))[0]
+			if header != MAGIC:
+				print(f"Wrong block header ({header:04X}) at {blk_id * BLOCK_SIZE} (Block #{blk_id})!")
+				exit(2)
+
+			while (pos := f.tell()) < file_size:
+				ts, lat, lon, alt, acc, bat, cnt = S_GPS.unpack(f.read(S_GPS.size))
+
+				if ts == 0xFFFFFFFF:
+					break
+
+				dt = datetime.fromtimestamp(ts + NEOGPS_EPOCH)
+
+				gps_cnt += 1
+				print(f"--- {gps_cnt:>4d} ---")
+				print(f"{pos:08X} >>> {dt} [{lat:.5f} {lon:.5f}] {alt}m, {acc}m, {bat}%")
+				for i in range(cnt):
+					pos_rssi = f.tell()
+					data = f.read(S_SIG.size)
+					off, rsi = S_SIG.unpack(data)
+
+					print(f"{pos_rssi:08X} #{i + 1:2d}", end=" ")
+
+					if rsi > 0 or rsi < -100:
+						print(f"[ERROR] Wrong RSSI: \"{rsi}\"!")
+						continue
+
+					if off <= 0 or off > BLOCK_SIZE:
+						print(f"[ERROR] Wrong AP offset: \"{off}\" (Total AP count: {len(aps)})!")
+						continue
+
+					print(f"{rsi}dbm", end=" ")
+
+					# Read AP info
+					prev_pos = f.tell()
+					f.seek(blk_start + off)
+					mac, ch_enc, ssid_len = S_AP.unpack(f.read(S_AP.size))
+					if ssid_len > 32 or ssid_len < 0:
+						ssid = f"[ERROR] Wrong SSID size: {ssid_len}"
+					else:
+						f.seek(blk_start + off - ssid_len)
+						data = f.read(ssid_len)
+						try:
+							ssid = data.decode('utf-8').strip('\0').strip()
+						except Exception as e:
+							ssid = "[ERROR] Not a UTF-8 string: " + str(data)
+
+						ssid = "[ HIDDEN ]" if ssid == "" else ssid
+					ch = (ch_enc >> 4) & 0x0F
+					enc = ch_enc & 0x0F
+					aps[mac] = ssid  # For statistic
+
+					# Go back to GPS RSSI records
+					f.seek(prev_pos)
+					print(f"[0x{(blk_start + off):08X}] ch. {ch:<2d}  {hex_string(mac)}  {ENC_TYPES.get(enc, "UNKNOWN"):<8s} {ssid}")
+
+			stats[blk_id] = (gps_cnt, len(aps))
+
+		print("-" * 64)
+		print("Block  GPS  APs")
+		for i, s in stats.items():
+			print(f"{i:5d} {s[0]:4d} {s[1]:4d}")
+
+
+"""
 		ap_info = {}
 		f.seek(-S_AP.size, 2)  # go to end of file
 		while True:
@@ -55,29 +144,4 @@ if __name__ == "__main__":
 			ap_info[pos] = (mac, ssid, ch, enc)
 
 			f.seek(pos - size - S_AP.size)
-
-		print("-" * 32)
-
-		f.seek(2)  # skip magic
-
-		p_num = 0
-		while True:
-			pos = f.tell()
-			ts, lat, lon, alt, acc, bat, cnt = S_GPS.unpack(f.read(S_GPS.size))
-			if ts == 0xFFFFFFFF:
-				break
-			dt = datetime.fromtimestamp(ts + NEOGPS_EPOCH)
-			print(f"{pos:08X}: #{p_num:04d} [{dt}] {lat:9.5f}, {lon:10.5f}, {alt:5d}m, {acc:3d}m, {bat:3d}%")
-			for i in range(cnt):
-				off, rsi = S_SIG.unpack(f.read(S_SIG.size))
-				print(f"\t#{i + 1:2d} @ {off:5d}: {rsi}dbm", end="")
-				info = ap_info.get(off, None)
-				if info:
-					print(f" ({info[2]:2d} {ENC_TYPES.get(info[3], "UNKNOWN"):>8s} \"{info[1]}\")")
-				else:
-					print()  # newline
-			p_num += 1
-
-		print("-" * os.get_terminal_size().columns)
-		print("Total GPS:", p_num)
-		print("Total APs:", len(ap_info))
+"""
