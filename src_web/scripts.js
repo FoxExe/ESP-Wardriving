@@ -155,11 +155,8 @@ function parseStatusPacket(dv) {
 	const lat = dv.getFloat32(offset, true); offset += 4;
 	const lon = dv.getFloat32(offset, true); offset += 4;
 	const alt = dv.getInt16(offset, true); offset += 2;
-	const hdop = dv.getUint16(offset, true); offset += 2;
+	const acc = dv.getUint16(offset, true); offset += 2;
 	const battery = dv.getUint8(offset); offset += 1;
-	const ap_status = dv.getInt8(offset); offset += 1;
-
-	// Extended info entry
 	const blocksTotal = dv.getUint32(offset, true); offset += 4;
 	const blocksUsed = dv.getUint32(offset, true); offset += 4;
 	const freeHeap = dv.getUint32(offset, true); offset += 4;
@@ -189,7 +186,7 @@ function parseStatusPacket(dv) {
 	// Обновляем текстовые поля UI
 	document.getElementById('gps-pos').innerText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
 	document.getElementById('gps-alt').innerText = alt.toFixed(1);
-	document.getElementById('gps-hdop').innerText = hdop.toFixed(2);
+	document.getElementById('gps-hdop').innerText = acc.toFixed(2);
 	document.getElementById('gps-count').innerText = points;
 	document.getElementById('current-block').innerText = current_block;
 	document.getElementById('sys-clients').innerText = clients;

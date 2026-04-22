@@ -8,8 +8,8 @@
 #define DATA_BLOCK_SIZE       (64 * 1024) // !DO NOT CHANGE! (Or change all "_flash.eraseBlock64K()" in code!)
 #define BLOCK_HEADER_MAGIC    0xDDCC
 #define NEOGPS_TS_OFFSET      946684800UL
-#define MIN_VALID_TS          (1767225600UL - NEOGPS_TS_OFFSET) // Unix timestamp. 01.01.2026
-#define MAX_CACHE_SIZE        1024  // 6 (MAC) + 2(Offset) = 8 bytes per record. 8 * 1024 = 8KB RAM
+#define MIN_VALID_TS          NEOGPS_TS_OFFSET // 01.01.2000
+#define MAX_CACHED_APS        1024  // (6 + 2) * 1024 = 8KB Ram.
 
 #pragma pack(push, 1)
 struct BlockHeader {
@@ -36,9 +36,9 @@ struct GPS_Position_Info {
 	float lat;
 	float lon;
 	int16_t alt;
-	uint16_t accuracy;
+	uint16_t acc;
 	uint8_t bat_charge;
-	int8_t ap_status;
+	uint8_t signals;
 };
 
 struct CacheEntry {
@@ -56,6 +56,7 @@ private:
 	uint16_t _ptrBottom = 0;        // Указатель записи AP_Info (снизу)
 	uint32_t _flashSize = 8 * 1024 * 1024; // 8MB for Winbond 25Q64, updated in begin()
 	uint32_t _blocksUsed = 0;
+	uint16_t _cacheIndex = 0;
 
 	std::vector<CacheEntry> _blockCache;
 
@@ -66,6 +67,8 @@ private:
 
 	// Внутренние методы
 	uint16_t align4(uint16_t addr) { return (addr + 3) & ~3; }
+	bool isApChanged(uint8_t* mac, uint16_t offset, uint8_t newChannelEnc, String newSsid);
+	uint16_t findApInFlash(uint8_t* mac);
 	void addToCache(uint8_t* mac, uint16_t offset);
 	uint16_t getOffsetFromCache(uint8_t* mac);
 public:
@@ -75,7 +78,7 @@ public:
 	bool begin();
 
 	// Основной метод записи
-	bool storeRecord(GPS_Position_Info& gps);
+	bool storeRecord(uint32_t ts, float lat, float lon, int16_t alt, uint16_t acc, uint8_t charge);
 
 	// Поблочное форматирование
 	void requestErase() { _requestedErase = true; }
@@ -100,4 +103,3 @@ public:
 };
 
 extern Logger logger;
-extern GPS_Position_Info current;

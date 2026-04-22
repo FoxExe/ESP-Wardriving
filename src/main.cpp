@@ -5,7 +5,6 @@
 #include <NMEAGPS.h>
 #include <EncButton.h>
 #include <time.h>
-
 #include <LwipDhcpServer.h>
 
 #include "Logger.h"
@@ -46,7 +45,13 @@ unsigned long lastScanMillis = 0;
 unsigned long lastBatteryUpdate = 0;
 
 #pragma pack(push, 1)
-struct ExtendedReport {
+struct CurrentReport {
+	uint32_t timestamp;
+	float lat;
+	float lon;
+	int16_t alt;
+	uint16_t accuracy;
+	uint8_t bat_charge;
 	uint32_t blocks_total = 0;
 	uint32_t blocks_used = 0;
 	uint32_t heap_free = 0;
@@ -54,7 +59,7 @@ struct ExtendedReport {
 	uint8_t ap_clients = 0;
 	uint32_t saved_points = 0;
 	uint16_t current_block = 0;
-} reportExt;
+} report;
 
 struct ActiveSatellites {
 	uint8_t ids[12] = { 0x00 };
@@ -249,7 +254,7 @@ void updateUI() {
 	screen.rect(54, 8, 71, 31, OLED_CLEAR);
 
 	// Fix OK, points capture in progress
-	if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
+	if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
 		// Play icon
 		screen.line(61, 9, 61, 13, OLED_FILL);
 		screen.line(62, 10, 62, 12, OLED_FILL);
@@ -273,17 +278,12 @@ void updateUI() {
 }
 
 void sendStats() {
-	constexpr size_t offset1 = 1;
-	constexpr size_t offset2 = offset1 + sizeof(current);
-	constexpr size_t offset3 = offset2 + sizeof(reportExt);
-	uint16_t size = offset3 + sizeof(NMEAGPS::satellite_view_t) * gps.sat_count;
-
+	uint16_t size = 1 + sizeof(report) + (sizeof(NMEAGPS::satellite_view_t) * gps.sat_count);
 	uint8_t* buff = (uint8_t*)malloc(size);
 	if (buff == nullptr) return;
 
 	buff[0] = 0x01;
-	memcpy(&buff[offset1], &current, sizeof(current));
-	memcpy(&buff[offset2], &reportExt, sizeof(reportExt));
+	memcpy(&buff[1], &report, sizeof(report));
 
 	// Send satellites detailed info
 	for (uint16_t i = 0; i < gps.sat_count; i++) {
@@ -295,7 +295,7 @@ void sendStats() {
 				break;
 			}
 		}
-		memcpy(&buff[offset3 + (sizeof(NMEAGPS::satellite_view_t) * i)], &sat, sizeof(sat));
+		memcpy(&buff[1 + sizeof(report) + (sizeof(NMEAGPS::satellite_view_t) * i)], &sat, sizeof(sat));
 	}
 
 	web.sendWSData(buff, size);
@@ -411,19 +411,13 @@ void loop() {
 	btn.tick();
 
 	if (btn.click()) {
-		Serial.println(F("Клик!"));
-
 		gpsPort.write(GPS_ON, sizeof(GPS_ON));
+		Serial.println(F("GPS IS ON"));
 	}
 
-	//if (btn.hasClicks(2)) {
-	//	Serial.println(F("Двойной клик!"));
-	//}
-
 	if (btn.hold()) {
-		Serial.println(F("Удержание 1 сек!"));
-
 		gpsPort.write(GPS_OFF, sizeof(GPS_OFF));
+		Serial.println(F("GPS IS OFF"));
 	}
 
 	// DEBUG
@@ -473,44 +467,43 @@ void loop() {
 
 		// Update GPS info
 		if (fix.valid.time) {
-			current.timestamp = (uint32_t)fix.dateTime;
+			report.timestamp = (uint32_t)fix.dateTime;
 			sync_clock(fix.dateTime);
 		}
 
 		if (fix.valid.location) {
-			current.lat = fix.latitude();
-			current.lon = fix.longitude();
+			report.lat = fix.latitude();
+			report.lon = fix.longitude();
 		}
 
 		if (fix.valid.altitude) {
-			current.alt = (int16_t)fix.altitude();
+			report.alt = (int16_t)fix.altitude();
 		}
 
 		if (fix.valid.hdop) {
-			current.accuracy = hdopToAccuracy(fix.hdop);
+			report.accuracy = hdopToAccuracy(fix.hdop);
 		}
 		else {
-			current.accuracy = 999;
+			report.accuracy = 999;
 		}
 
-		current.bat_charge = battery.getPercentage();
-		current.ap_status = WiFi.scanComplete();
+		report.bat_charge = battery.getPercentage();
 
 		// NOTE: Used only in browser, store as ExtendedInfo structure
-		reportExt.blocks_total = logger.blocksTotal();
-		reportExt.blocks_used = logger.blocksUsed();
-		reportExt.heap_free = ESP.getFreeHeap();
-		reportExt.heap_max = ESP.getMaxFreeBlockSize();
-		reportExt.ap_clients = WiFi.softAPgetStationNum();
-		reportExt.saved_points = logger.pointsSaved();
-		reportExt.current_block = logger.getCurrentBlockID();
+		report.blocks_total = logger.blocksTotal();
+		report.blocks_used = logger.blocksUsed();
+		report.heap_free = ESP.getFreeHeap();
+		report.heap_max = ESP.getMaxFreeBlockSize();
+		report.ap_clients = WiFi.softAPgetStationNum();
+		report.saved_points = logger.pointsSaved();
+		report.current_block = logger.getCurrentBlockID();
 
 		// && WiFi.softAPgetStationNum() == 0
 		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
 			lastScanMillis = millis();
 			while (web.isBusy()) { yield(); delay(10); }
-			if (fix.valid.location && current.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
-				logger.storeRecord(current);
+			if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
+				logger.storeRecord(report.timestamp, report.lat, report.lon, report.alt, report.accuracy, report.bat_charge);
 				WiFi.scanDelete();
 				WiFi.scanNetworks(true, true); // Асинхронно
 			}
@@ -518,7 +511,7 @@ void loop() {
 
 		updateUI();
 
-		// send to browser [current] + [reportExt]
+		// send to browser current data
 		sendStats();
 		sendWiFiScanResult(); // Send to browser. Can be requested by user.
 
