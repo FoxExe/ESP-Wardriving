@@ -134,11 +134,11 @@ function updateConnStatus(online) {
 
 function updateTimeDisplay(ts) {
 	if (!ts) return;
-	const gpsDate = new Date(ts * 1000);
+	const gpsDate = new Date((ts + 946684800) * 1000);
 	const now = new Date();
 
-	document.getElementById('time-gps').innerText = gpsDate.toLocaleTimeString();
-	document.getElementById('time-browser').innerText = now.toLocaleTimeString();
+	document.getElementById('time-gps').innerText = gpsDate.toLocaleString(); // toLocaleTimeString()
+	document.getElementById('time-browser').innerText = now.toLocaleString();
 
 	// Подсветка расхождения
 	const diff = Math.abs(gpsDate - now);
@@ -253,7 +253,7 @@ function parseWiFiPacket(view) {
             <td class="ps-3">${ssid || '<em>Скрыта</em>'}</td>
             <td class="small text-muted">${mac}</td>
             <td><small>${getAuthName(enc)}</small></td>
-            <td class="pe-3">
+            <td class="pe-3" title="${rssi}dbm">
                 <div class="d-flex align-items-center">
                     <span class="badge bg-secondary me-2">CH ${chan}</span>
                     <div class="progress flex-grow-1" style="height:6px; min-width:60px">
