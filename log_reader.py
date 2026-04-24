@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 
-LOG_DUMP = "log_107-108.bin"
+LOG_DUMP = "log_109.bin"
 
 
 NEOGPS_EPOCH = 946684800
@@ -75,13 +75,13 @@ if __name__ == "__main__":
 
 				gps_cnt += 1
 				print(f"--- {gps_cnt:>4d} ---")
-				print(f"{pos:08X} >>> {dt} [{lat:.5f} {lon:.5f}] {alt}m, {acc}m, {bat}%")
+				print(f"0x{pos:08X} >>>> {dt} [{lat:.5f} {lon:.5f}] {alt}m, {acc}m, {bat}%")
 				for i in range(cnt):
 					pos_rssi = f.tell()
 					data = f.read(S_SIG.size)
 					off, rsi = S_SIG.unpack(data)
 
-					print(f"{pos_rssi:08X} #{i + 1:2d}", end=" ")
+					print(f"0x{pos_rssi:08X} - {i + 1:2d}", end=" ")
 
 					if rsi > 0 or rsi < -100:
 						print(f"[ERROR] Wrong RSSI: \"{rsi}\"!")
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 						print(f"[ERROR] Wrong AP offset: \"{off}\" (Total AP count: {len(aps)})!")
 						continue
 
-					print(f"{rsi}dbm", end=" ")
+					print(f"{rsi}dbm", end="  ")
 
 					# Read AP info
 					prev_pos = f.tell()
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
 					# Go back to GPS RSSI records
 					f.seek(prev_pos)
-					print(f"[0x{(blk_start + off):08X}] ch. {ch:<2d}  {hex_string(mac)}  {ENC_TYPES.get(enc, "UNKNOWN"):<8s} {ssid}")
+					print(f"[0x{(blk_start + off):08X}] ch. {ch:<2d}  {hex_string(mac)}  {ENC_TYPES.get(enc, "UNKNOWN"):<8s}  {ssid}")
 
 			stats[blk_id] = (gps_cnt, len(aps))
 
