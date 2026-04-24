@@ -254,13 +254,14 @@ void updateUI() {
 	screen.rect(54, 8, 71, 31, OLED_CLEAR);
 
 	// Fix OK, points capture in progress
-	if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
+	if (fix.valid.location && report.accuracy <= cfg.min_acc) {
 		// Play icon
 		screen.line(61, 9, 61, 13, OLED_FILL);
 		screen.line(62, 10, 62, 12, OLED_FILL);
 		screen.dot(63, 11, OLED_FILL);
 	}
 	else {
+		// Pause icon
 		screen.rect(60, 9, 61, 13, OLED_FILL);
 		screen.rect(63, 9, 64, 13, OLED_FILL);
 	}
@@ -498,22 +499,8 @@ void loop() {
 		report.saved_points = logger.pointsSaved();
 		report.current_block = logger.getCurrentBlockID();
 
-		// && WiFi.softAPgetStationNum() == 0
-		if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
-			lastScanMillis = millis();
-			while (web.isBusy()) { yield(); delay(10); }
-			if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() >= 0) {
-				logger.storeRecord(report.timestamp, report.lat, report.lon, report.alt, report.accuracy, report.bat_charge);
-				WiFi.scanDelete();
-				WiFi.scanNetworks(true, true); // Асинхронно
-			}
-		}
-
 		updateUI();
-
-		// send to browser current data
 		sendStats();
-		sendWiFiScanResult(); // Send to browser. Can be requested by user.
 
 		// DEBUG
 		// Warning: Too heavy! Can crash (stack overflow)
@@ -526,6 +513,24 @@ void loop() {
 		Serial.printf(" | LAT: %9.5f LON: %10.5f ALT: %7.4f HDOP: %7.4f ACC: %3d SATS: %2d/%2d", fix.latitude(), fix.longitude(), fix.altitude(), (float)(fix.hdop / 1000), hdopToAccuracy(fix.hdop), fix.satellites, gps.sat_count);
 		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
 		Serial.println();
+	}
+
+	if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
+		lastScanMillis = millis();
+		//while (web.isBusy()) { yield(); delay(10); }
+		if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() < 0) {
+			WiFi.scanNetworks(true, true); // Асинхронно
+		}
+	}
+
+	if (WiFi.scanComplete() >= 0) {
+		sendWiFiScanResult();
+
+		if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() < 0) {
+			logger.storeRecord(report.timestamp, report.lat, report.lon, report.alt, report.accuracy, report.bat_charge);
+		}
+
+		WiFi.scanDelete();
 	}
 
 	web.update();
@@ -561,30 +566,30 @@ void loop() {
 	if (millis() - lastBatteryUpdate >= 1000) {
 		lastBatteryUpdate = millis();
 		battery.update();
-	}
 
-	if (battery.is_low()) {
-		Serial.println(F("Battery low! Shutting down..."));
-		screen.clear();
-		screen.setScale(2);
-		screen.setCursorXY(0, 8);
-		screen.print(F("LOW BAT"));
-		screen.update();
-		for (int i = 0; i < 30; i++) {
+		if (battery.is_low()) {
+			Serial.println(F("Battery low! Shutting down..."));
+			screen.clear();
+			screen.setScale(2);
+			screen.setCursorXY(0, 8);
+			screen.print(F("LOW BAT"));
+			screen.update();
+			for (int i = 0; i < 30; i++) {
+				delay(100);
+				yield();
+			}
+
+			web.end();
+
+			WiFi.disconnect(true);
 			delay(100);
-			yield();
+			WiFi.mode(WIFI_OFF);
+			WiFi.forceSleepBegin();
+			delay(1);
+
+
+			ESP.deepSleep(0); // Turn off device
+			//while (true) { yield(); } // Stop loop()
 		}
-
-		web.end();
-
-		WiFi.disconnect(true);
-		delay(100);
-		WiFi.mode(WIFI_OFF);
-		WiFi.forceSleepBegin();
-		delay(1);
-
-
-		ESP.deepSleep(0); // Turn off device
-		//while (true) { yield(); } // Stop loop()
 	}
 }
