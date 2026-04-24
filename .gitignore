@@ -1,3 +1,5 @@
 .pio
 .vscode/
-data/
+
+data/*
+!data/.gitkeep
