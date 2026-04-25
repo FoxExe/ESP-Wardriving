@@ -4,8 +4,8 @@
 
 // --- Конфигурация по умолчанию ---
 #define CFG_FILE "/settings.bin"
-#pragma pack(push, 1)
 
+#pragma pack(push, 1)
 struct ConfigData {
 	uint16_t version = 1;
 	char ssid[32] = "GPS_Tracker";
