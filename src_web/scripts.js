@@ -134,7 +134,7 @@ function updateConnStatus(online) {
 
 function updateTimeDisplay(ts) {
 	if (!ts) return;
-	const gpsDate = new Date((ts + 946684800) * 1000);
+	const gpsDate = new Date((ts) * 1000);
 	const now = new Date();
 
 	document.getElementById('time-gps').innerText = gpsDate.toLocaleString(); // toLocaleTimeString()
@@ -167,19 +167,14 @@ function parseStatusPacket(dv) {
 
 	// Спутники
 	const sats = [];
-	const SAT_SIZE = 6;  // [1 id][1 el][2 az][1 snr][1 tracked]
+	const SAT_SIZE = 3;
 
 	while (offset + SAT_SIZE <= dv.byteLength) {
-		const id = dv.getUint8(offset);
-		if (id !== 0) {
-			sats.push({
-				id: id,
-				el: dv.getUint8(offset + 1),
-				az: dv.getUint16(offset + 2, true),
-				snr: dv.getUint8(offset + 4),
-				tracked: dv.getUint8(offset + 5)
-			});
-		}
+		sats.push({
+			id: dv.getUint8(offset),
+			snr: dv.getUint8(offset + 1),
+			tracked: dv.getUint8(offset + 2) !== 0
+		});
 		offset += SAT_SIZE;
 	}
 
@@ -346,12 +341,6 @@ async function rescanNetworks(btn) {
 	}
 }
 
-function gpsToUnix(gpsSeconds) {
-	// NeoGPS lib starts from 01.01.2000 00:00:00 UTC
-	const NEOGPS_EPOCH_OFFSET = 946684800;
-	return Number(gpsSeconds) + NEOGPS_EPOCH_OFFSET;
-}
-
 async function loadLogs(btn) {
 	if (btn) btn.disabled = true;
 
@@ -373,7 +362,7 @@ async function loadLogs(btn) {
 				<td class="ps-3"><input type="checkbox" class="form-check-input block-checkbox" value="${id}" onchange="updateBlockButtons()"/></td>
 				<td><a href="/download?id=${id}" class="fw-bold text-decoration-none">Блок #${id}</a></td>
 				<td>64 KB</td>
-				<td class="log-time pe-3" data-ts="${ts}">${formatDate(gpsToUnix(ts))}</td>
+				<td class="log-time pe-3" data-ts="${ts}">${formatDate(ts)}</td>
 			</tr>`;
 			document.getElementById('log-list').insertAdjacentHTML('beforeend', row);
 		});

@@ -1,5 +1,4 @@
 #pragma once
-
 #include <Arduino.h>
 
 // R = 1мОм + 330кОм
@@ -16,6 +15,7 @@ private:
 	float _filteredVoltage = -1.0;
 	float _k = BATT_DIVIDER_K;
 	int _currentPercentage = 0;
+	ulong _lastUpdate = 0;
 
 	struct DischargePoint { float v; int p; };
 	static constexpr int TABLE_SIZE = 12;
@@ -45,7 +45,9 @@ public:
 	}
 
 	void update() {
-		yield(); // Fix possible Wi-Fi conflicts
+		if (millis() - _lastUpdate < 1000) return;
+		_lastUpdate = millis();
+
 		int raw = analogRead(A0);
 		float instantVoltage = ((float)raw / ADC_MAX) * BATT_REF_V * _k;
 
@@ -71,5 +73,3 @@ public:
 	int   getPercentage() const { return _currentPercentage; }
 	bool  is_low() { return _currentPercentage <= TURNOFF_THRESHOLD; };
 };
-
-Battery battery;

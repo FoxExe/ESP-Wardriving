@@ -25,7 +25,9 @@ bool Logger::begin() {
 	_flashSize = _flash.getCapacity();
 	_blocksUsed = 0;
 
+#ifdef SERIAL_DEBUG
 	Serial.printf("Flash init done. JEDECID: %08X, Capacity: %d\n", _flash.getJEDECID(), _flashSize);
+#endif
 
 	// Search last used block
 	uint32_t maxTs = 0;
@@ -87,7 +89,9 @@ bool Logger::begin() {
 		}
 	}
 
+#ifdef SERIAL_DEBUG
 	Serial.printf("Logger ready. Blocks used: %d/%d. Current block: %d\n", _blocksUsed, blocksTotal(), _currentBlockAddr / DATA_BLOCK_SIZE);
+#endif
 
 	return true;
 }
@@ -318,9 +322,9 @@ void Logger::eraseFlash(std::function<void(int)> onProgress) {
 	_rotateLogs = true; // Hack - we need format next block in any way!
 	prepareNextBlock();
 	_rotateLogs = oldState;
-
+#ifdef SERIAL_DEBUG
 	Serial.println(F("FLASH ERASED."));
-
+#endif
 	_requestedErase = false;
 }
 

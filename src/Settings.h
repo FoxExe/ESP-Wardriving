@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 #include <LittleFS.h>
 
 
@@ -17,7 +18,6 @@ struct ConfigData {
 	bool rotate_logs = true;
 };
 #pragma pack(pop)
-
 
 class ConfigManager : public ConfigData {
 public:

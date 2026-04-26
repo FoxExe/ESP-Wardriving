@@ -1,7 +1,6 @@
 #pragma once
 #include <Arduino.h>
 #include <SPIMemory.h>
-#include <vector>
 
 // Константы
 #define SPI_CS_PIN            16

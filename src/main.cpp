@@ -1,57 +1,40 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <SoftwareSerial.h>
-#include <GyverOLED.h>
-#include <NMEAGPS.h>
 #include <EncButton.h>
 #include <time.h>
 #include <LwipDhcpServer.h>
+//#include <SoftwareSerial.h>
 
 #include "Logger.h"
 #include "Battery.h"
 #include "Settings.h"
 #include "WebServer.h"
+#include "GUI.h"
+#include "GPS.h"
 
 
-#define MAX_SAT_BARS 16
-#define MAX_APS_BARS 25  // (128 - 78) / 2 = graph width / (bar_width + padding_right)
-
-GyverOLED<SSD1306_128x32, OLED_BUFFER> screen;
-SoftwareSerial gpsPort(15, 2);
-NMEAGPS gps;
-gps_fix fix;
 WebServer web(80);
 EncButton btn(0);
+GUI gui;
+//SoftwareSerial gpsPort(15, 2);
+//UbloxGPS gps(gpsPort);
+UbloxGPS gps(Serial);
+Battery battery;
 
-const uint8_t GPS_OFF[] = {
-	0xB5, 0x62, // Заголовок (Sync)
-	0x02, 0x41, // ID сообщения (RXM-PMREQ)
-	0x08, 0x00, // Длина данных (8 байт)
-	0x00, 0x00, 0x00, 0x00, // Резерв
-	0x02, 0x00, 0x00, 0x00, // Режим: 0x02 = Backup (сон)
-	0x4D, 0x3B  // Контрольная сумма (CK_A, CK_B)
-};
-
-const uint8_t GPS_ON[] = {
-	0xB5, 0x62,
-	0x02, 0x41,
-	0x08, 0x00,
-	0x00, 0x00, 0x00, 0x00,
-	0x01, 0x00, 0x00, 0x00,
-	0x4C, 0x37
-};
+GPSPoint gpsPointA;
+GPSPoint gpsPointB;
 
 unsigned long lastScanMillis = 0;
-unsigned long lastBatteryUpdate = 0;
+unsigned long lastScreenUpdate = 0;
 
 #pragma pack(push, 1)
 struct CurrentReport {
-	uint32_t timestamp;
-	float lat;
-	float lon;
-	int16_t alt;
-	uint16_t accuracy;
-	uint8_t bat_charge;
+	uint32_t timestamp = 0;
+	float lat = 0;
+	float lon = 0;
+	int16_t alt = 0;
+	uint16_t acc = 0;
+	uint8_t bat_charge = 0;
 	uint32_t blocks_total = 0;
 	uint32_t blocks_used = 0;
 	uint32_t heap_free = 0;
@@ -60,247 +43,65 @@ struct CurrentReport {
 	uint32_t saved_points = 0;
 	uint16_t current_block = 0;
 } report;
-
-struct ActiveSatellites {
-	uint8_t ids[12] = { 0x00 };
-	uint8_t count = 0;
-} sats_active;
 #pragma pack(pop)
 
-uint16_t hdopToAccuracy(uint16_t hdop) {
-	if (hdop == 0) { return 0xFFFF; }
-	return (uint16_t)((hdop * 0.0045f) + 0.5f);
-}
+void handleGpsUpdate() {
+	// Fill report
+	report.timestamp = gps.get_timestamp();
+	report.lat = gps.lat;
+	report.lon = gps.lon;
+	report.alt = gps.altitude();
+	report.acc = gps.acc;
+	report.bat_charge = battery.getPercentage();
+	report.blocks_total = logger.blocksTotal();
+	report.blocks_used = logger.blocksUsed();
+	report.heap_free = ESP.getFreeHeap();
+	report.heap_max = ESP.getMaxFreeBlockSize();
+	report.ap_clients = WiFi.softAPgetStationNum();
+	report.saved_points = logger.pointsSaved();
+	report.current_block = logger.getCurrentBlockID();
 
-void sync_clock(const NeoGPS::time_t& dt) {
-	struct tm t;
-	t.tm_hour = dt.hours;
-	t.tm_min = dt.minutes;
-	t.tm_sec = dt.seconds;
-	t.tm_year = dt.year + 2000 - 1900; // Год с 1900
-	t.tm_mon = dt.month - 1;          // Месяцы 0-11
-	t.tm_mday = dt.date;
-
-	time_t now = mktime(&t);
-	struct timeval tv = { .tv_sec = now, .tv_usec = 0 };
-	settimeofday(&tv, NULL); // Устанавливаем системное время ESP8266
-}
-
-void draw_loading_screen(const __FlashStringHelper* msg) {
-	screen.clear();
-	screen.setScale(2);
-	screen.setCursorXY(0, 0);
-	screen.print(F("LOADING"));
-
-	screen.rect(0, 24, 127, 31, OLED_CLEAR);
-	screen.setCursorXY(0, 24);
-	screen.setScale(1);
-	screen.print(msg);
-
-	screen.update();
-
-	Serial.println(msg); // Debug
-}
-
-
-void updateUI() {
-	//screen.clear();
-
-	// ========= HEADER  =========
-	screen.rect(0, 0, 127, 7, OLED_CLEAR); // clear line
-	screen.setScale(1);
-	screen.setCursorXY(0, 0);
-
-	time_t now = time(nullptr) + (cfg.tz_offset * 60);
-	struct tm* ptm = gmtime(&now);
-
-	screen.printf("%02d:%02d:%02d", ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
-	/*
-	if (fix != nullptr && fix->valid.time) {
-		screen.printf("%02d:%02d:%02d", fix->dateTime.hours, fix->dateTime.hours, fix->dateTime.hours);
-	}
-	else {
-		screen.print("--:--:--");
-	}
-	*/
-
-	// GPS points counter
-	screen.setCursorXY(52, 0);
-	screen.printf("%7d", logger.pointsSaved());
-
-	// Draw battery icon
-	screen.rect(99, 1, 102, 6, OLED_STROKE);
-	screen.line(100, 0, 101, 0, OLED_FILL);
-
-	// Battery charge text
-	screen.setCursorXY(104, 0);
-	screen.printf("%3d%%", battery.getPercentage());
-
-	// ========= GRAPH 1 =========
-	// Clear graph
-	screen.rect(48, 8, 53, 31, OLED_CLEAR);
-	// Draw scale at right
-	screen.line(51, 8, 51, 31, OLED_FILL);
-	screen.line(48, 12, 51, 12, OLED_FILL);
-	screen.line(48, 22, 51, 22, OLED_FILL);
-	for (uint8_t i = 8; i < 32; i++) {
-		if (i % 2 != 0) continue;
-		screen.dot(50, i, OLED_FILL);
-	}
-
-	// Clear graph
-	screen.rect(0, 8, 47, 31, OLED_CLEAR);
-	// Note: We can display max 16. In lib max is 20. But in reality - max is ~12.
-	// Just cut off weaked satellites!
-	uint8_t thresholdSNR = 0;
-	if (gps.sat_count > MAX_SAT_BARS) {
-		uint8_t allSNRs[NMEAGPS_MAX_SATELLITES];
-		for (uint8_t i = 0; i < gps.sat_count; i++) allSNRs[i] = gps.satellites[i].snr;
-
-		// Sorting...
-		for (uint8_t i = 0; i < gps.sat_count - 1; i++) {
-			for (uint8_t j = 0; j < gps.sat_count - i - 1; j++) {
-				if (allSNRs[j] < allSNRs[j + 1]) {
-					uint8_t temp = allSNRs[j];
-					allSNRs[j] = allSNRs[j + 1];
-					allSNRs[j + 1] = temp;
-				}
-			}
-		}
-		thresholdSNR = allSNRs[MAX_SAT_BARS - 1]; // Порог — это SNR 16-го по силе спутника
-	}
-
-	// Draw bars and mark used/tracked sattelites
-	uint8_t bar_num = 0;
-	for (uint8_t i = 0; i < gps.sat_count; i++) {
-		auto& sat = gps.satellites[i];
-		if (sat.snr >= thresholdSNR) {
-			uint8_t h = map(sat.snr, 0, 99, 0, 23);
-			screen.rect(i * 3, 31 - h, i * 3 + 1, 31, OLED_FILL);
-
-			// sat.tracked - is a "sat is visible" not "sat used for positioning", so we need this hack:
-			for (uint8_t j = 0; j < sats_active.count; j++) {
-				if (sats_active.ids[j] == sat.id) {
-					screen.line(i * 3, 31 - h + 1, i * 3 + 1, 31 - h + 1, OLED_CLEAR);
-					break;
-				}
-			}
-
-			bar_num++;
-			if (bar_num > MAX_SAT_BARS) break; // Max 16 bars
-		}
-	}
-
-	// ========= GRAPH 2 =========
-	// Clear graph
-	screen.rect(72, 8, 77, 31, OLED_CLEAR);
-	// Draw scale at right
-	screen.line(73, 8, 73, 31, OLED_FILL);
-	screen.line(73, 12, 76, 12, OLED_FILL);
-	screen.line(73, 22, 76, 22, OLED_FILL);
-	for (uint8_t i = 8; i < 32; i++) {
-		if (i % 2 != 0) continue;
-		screen.dot(74, i, OLED_FILL);
-	}
-
-	// Draw bars
-	int8_t scanned = WiFi.scanComplete();
-	if (scanned >= 0) {
-		screen.rect(78, 8, 127, 31, OLED_CLEAR);
-		for (uint8_t i = 0; i < scanned; i++) {
-			uint8_t h = map(constrain(WiFi.RSSI(i), -100, -50), -100, -50, 0, 23);
-			screen.line(78 + (i * 2), 31 - h, 78 + (i * 2), 31, OLED_FILL);
-			//screen.rect(78 + (i * 2), 31 - h, 78 + (i * 3), 31, OLED_FILL);
-			//if (WiFi.isHidden(i)) {
-			if (WiFi.encryptionType(i) == ENC_TYPE_NONE) {
-				screen.dot(78 + (i * 2), 31 - h + 1, OLED_CLEAR);
-			}
-			if (i > MAX_APS_BARS) break; // max 25 bars
-		}
-	}
-	if (scanned == WIFI_SCAN_RUNNING) {
-		screen.rect(119, 9, 127, 15, OLED_CLEAR);
-		// Reload icon
-		screen.circle(123, 12, 3, OLED_STROKE);
-		screen.line(120, 9, 126, 15, OLED_CLEAR);
-		screen.line(119, 12, 121, 12, OLED_FILL);
-		screen.line(125, 12, 127, 12, OLED_FILL);
-
-		// Play icon (triangle)
-		//screen.line(124, 9, 126, 11, OLED_FILL);
-		//screen.line(126, 11, 124, 13, OLED_FILL);
-		//screen.line(124, 13, 124, 9, OLED_FILL);
-		//screen.dot(125, 11, OLED_FILL);
-
-		/*
-		screen.setScale(2);
-		screen.setCursorXY(79, 13);
-		screen.print("SCAN"); // max 4 chars!
-		screen.setScale(1);
-		*/
-	}
-	else if (scanned == WIFI_SCAN_FAILED) {
-		screen.rect(119, 9, 127, 15, OLED_CLEAR);
-		// Pause icon
-		screen.rect(121, 9, 122, 15, OLED_FILL);
-		screen.rect(124, 9, 125, 15, OLED_FILL);
-		//screen.rect(78, 8, 127, 31, OLED_CLEAR);
-		//screen.setCursorXY(90, 16);
-		//screen.print(F("PAUSE"));
-	}
-
-	// ========= OTHER   =========
-	// clear area
-	screen.rect(54, 8, 71, 31, OLED_CLEAR);
-
-	// Fix OK, points capture in progress
-	if (fix.valid.location && report.accuracy <= cfg.min_acc) {
-		// Play icon
-		screen.line(61, 9, 61, 13, OLED_FILL);
-		screen.line(62, 10, 62, 12, OLED_FILL);
-		screen.dot(63, 11, OLED_FILL);
-	}
-	else {
-		// Pause icon
-		screen.rect(60, 9, 61, 13, OLED_FILL);
-		screen.rect(63, 9, 64, 13, OLED_FILL);
-	}
-
-	// Accuracy
-	screen.setCursorXY(54, 16);
-	uint16_t acc = hdopToAccuracy(fix.hdop);
-	screen.printf("%3d", (acc > 999) ? 999 : acc);
-
-	// SPI Flash usage percentage
-	screen.setCursorXY(54, 24);
-	screen.printf("%2d%%", (logger.getUsagePercentage() >= 100) ? 99 : logger.getUsagePercentage());
-
-	screen.update();
-}
-
-void sendStats() {
-	uint16_t size = 1 + sizeof(report) + (sizeof(NMEAGPS::satellite_view_t) * gps.sat_count);
+	// Send report
+	uint16_t size = 1 + sizeof(report) + (sizeof(GPSSatellite) * gps.satellites_count);
 	uint8_t* buff = (uint8_t*)malloc(size);
 	if (buff == nullptr) return;
 
-	buff[0] = 0x01;
+	buff[0] = 0x01; // This is report packet
+
 	memcpy(&buff[1], &report, sizeof(report));
 
-	// Send satellites detailed info
-	for (uint16_t i = 0; i < gps.sat_count; i++) {
-		auto sat = gps.satellites[i];
-		sat.tracked = false;
-		for (uint8_t j = 0; j < sats_active.count; j++) {
-			if (sats_active.ids[j] == sat.id) {
-				sat.tracked = true;
-				break;
-			}
-		}
-		memcpy(&buff[1 + sizeof(report) + (sizeof(NMEAGPS::satellite_view_t) * i)], &sat, sizeof(sat));
+	// Set satellites detailed info
+	if (gps.satellites_count > 0) {
+		memcpy(&buff[1 + sizeof(report)], gps.satellites, sizeof(GPSSatellite) * gps.satellites_count);
 	}
 
-	web.sendWSData(buff, size);
+	web.sendWSData(buff, size); // Send report throught websocket
 	free(buff);
+
+	// Updatre GPS graph
+	int snr_values[gps.satellites_count];
+	bool tracked[gps.satellites_count];
+	for (int i = 0; i < gps.satellites_count; i++) {
+		snr_values[i] = gps.satellites[i].snr;
+		tracked[i] = gps.satellites[i].is_used;
+	}
+	gui.draw_graph_gps(snr_values, tracked, gps.satellites_count);
+
+	gui.draw_isrunning_icon(gps.fix && gps.acc <= cfg.min_acc);
+	gui.draw_accuracy(gps.acc > 999 ? 999 : gps.acc);
+
+#ifdef SERIAL_DEBUG
+	struct tm ptm = gps.get_time();
+	Serial.printf("[%02d.%02d.%04d %02d:%02d:%02d]", ptm.tm_mday, ptm.tm_mon + 1, ptm.tm_year + 1900, ptm.tm_hour, ptm.tm_min, ptm.tm_sec);
+	Serial.printf(" | LAT: %10.6f  LON: %11.6f  ALT: %7.4f  HDOP: %7.4f  ACC: %6.2f  SATS: %2d/%2d", gps.lat, gps.lon, gps.altitude(), gps.hdop, gps.acc, gps.sat_used(), gps.sat_total());
+	Serial.println("\n\tID   RSSI U SIGNAL");
+	for (int i = 0; i < gps.satellites_count; i++) {
+		Serial.printf("\t%2d %3ddbm %d ", gps.satellites[i].id, gps.satellites[i].snr, gps.satellites[i].is_used);
+		int bars = map(gps.satellites[i].snr, 0, 100, 0, 32);
+		for (int j = 0; j < bars; ++j) { Serial.print("#"); }
+		Serial.println("");
+	}
+#endif
 }
 
 #pragma pack(push, 1)
@@ -343,6 +144,39 @@ void sendWiFiScanResult() {
 	web.sendWSData(buffer.data(), buffer.size());
 }
 
+void updateWiFiGraph() {
+	int8_t scanned = WiFi.scanComplete();
+	if (scanned <= 0) return;
+
+	int rssi_values[scanned];
+	bool is_open[scanned];
+
+	for (int i = 0; i < scanned; i++) {
+		rssi_values[i] = WiFi.RSSI(i);
+		is_open[i] = (WiFi.encryptionType(i) == ENC_TYPE_NONE);
+	}
+
+	gui.draw_graph_wifi(rssi_values, is_open, scanned);
+}
+
+void handleButtons() {
+	btn.tick();
+
+	if (btn.click()) {
+		gps.start();
+#ifdef SERIAL_DEBUG
+		Serial.println(F("GPS IS ON"));
+#endif
+	}
+
+	if (btn.hold()) {
+		gps.stop();
+#ifdef SERIAL_DEBUG
+		Serial.println(F("GPS IS OFF"));
+#endif
+	}
+}
+
 void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options) {
 	// Формат опции 121: 
 	// [Маска] [Сеть (без нулей)] [IP шлюза]
@@ -352,244 +186,194 @@ void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options)
 	options.add(121, route_data, sizeof(route_data));
 }
 
+// ================================================================
 void setup() {
 	// Fix internal timer
-	struct timeval tv = { .tv_sec = 946684800, .tv_usec = 0 };
-	settimeofday(&tv, nullptr);
+	//struct timeval tv = { .tv_sec = 946684800, .tv_usec = 0 };
+	//settimeofday(&tv, nullptr);
 
+#ifdef SERIAL_DEBUG
 	// Debug
 	Serial.begin(115200);
 	Serial.println();
 	Serial.println(F("Loading..."));
 	Serial.println();
-
-	// Screen init
-	screen.init();
-	screen.clear();
-	screen.setScale(1);
+#endif
 
 	// Button (GPIO-0)
 	btn.setHoldTimeout(1000); // 1 sec
 
 	// Flash init
-	draw_loading_screen(F("Flash..."));
+	gui.clear_screen();
+	gui.draw_loading("Flash");
 	logger.setRotation(cfg.rotate_logs);
 	if (!logger.begin()) {
-		//screen.clear();
-		screen.setScale(1);
-		screen.setCursorXY(0, 16);
-		screen.println(F("Flash error!"));
-		screen.printf("Blocks: %3d/%3d/%3d\n", logger.blocksUsed(), logger.blocksFree(), logger.blocksTotal());
-		screen.update();
-
+		gui.draw_loading("Flash error!");
 		while (true) { yield(); delay(100); }
 	}
 
 	// GPS
-	draw_loading_screen(F("GPS..."));
-	gpsPort.begin(9600);
+	gui.draw_loading("GPS");
+	//gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 256); // Increase buffer
+	Serial1.begin(115200); // Debug
+	Serial.begin(9600); // GPS
+	//Serial.setRxBufferSize(512);
+
+	// Switch module to faster speed
+	//gps.setUpdateRate(500); // Update rate 1Hz -> 2Hz, up to 10Hz
+	/*! WARNING: SoftwareSerial can't handle more than 9600! Even in overclock mode (160MHz CPU)
+	gps.reconfigure(115200);
+	gpsPort.flush();
+	gpsPort.end();
+	delay(100);
+	gpsPort.begin(115200);
+	*/
+	gps.on_update = handleGpsUpdate;
 
 	// Configure Wi-Fi
-	draw_loading_screen(F("Wi-Fi..."));
+	gui.draw_loading("Wi-Fi");
 	WiFi.setAutoConnect(false); // fix "-1" scan status after boot
 	WiFi.mode(WIFI_AP_STA);
 	WiFi.softAP(cfg.ssid, cfg.pass);
 	WiFi.softAPDhcpServer().onSendOptions(onDhcpOptions);  // Prioritize network
 
 	// Web server / web interface
-	draw_loading_screen(F("Web..."));
+	gui.draw_loading("Web");
 	web.begin();
 
 	// Battery
 	battery.update();
 
-	draw_loading_screen(F("Done!"));
-	screen.clear();
-	screen.update();
+	gui.draw_loading("Done!");
+	delay(500);
+
+	// Initial screen elements
+	gui.clear_screen();
+	gui.draw_time();
+	gui.draw_points(logger.pointsSaved());
+	gui.draw_battery(battery.getPercentage());
+	gui.draw_ruler(48, 8, 23, true);
+	gui.draw_ruler(73, 8, 23, false);
+	gui.draw_isrunning_icon(false);
+	gui.draw_accuracy(999);
+	gui.draw_flash_used(map(logger.blocksUsed(), 0, logger.blocksTotal(), 0, 100));
+	gui.redraw();
 }
 
+// ================================================================
 void loop() {
-	btn.tick();
-
-	if (btn.click()) {
-		gpsPort.write(GPS_ON, sizeof(GPS_ON));
-		Serial.println(F("GPS IS ON"));
+	/* DEBUG
+	if (gpsPort.available()) {
+		Serial.write(gpsPort.read());
 	}
+	return;
+	*/
 
-	if (btn.hold()) {
-		gpsPort.write(GPS_OFF, sizeof(GPS_OFF));
-		Serial.println(F("GPS IS OFF"));
-	}
+	gps.update();
+	web.update();
+	battery.update();
+	handleButtons();
 
-	// DEBUG
-	//if (gpsPort.available()) {
-	//	Serial.write(gpsPort.read());
-	//}
+	// Update display every one second
+	if (millis() - lastScreenUpdate >= 1000) {
+		lastScreenUpdate = millis();
 
-	while (gpsPort.available()) {
-		char c = gpsPort.read();
-		static char buffer[100];
-		static int pos = 0;
-		if (c == '$') pos = 0;
-		if (pos < 99) buffer[pos++] = c;
-		if (c == '\n') {
-			buffer[pos] = 0;
-			// Если поймали GSA — вытаскиваем ID активных спутников
-			if (strstr(buffer, "GSA")) {
-				sats_active.count = 0;
-
-				char* p = buffer;
-				for (int i = 0; i < 3; i++) {
-					p = strchr(p, ',');
-					if (p) p++;
-				}
-
-				// Читаем 12 полей ID
-				for (int i = 0; i < 12; i++) {
-					if (p && *p != ',') { // Если между запятыми есть число
-						int id = atoi(p);
-						if (id > 0) sats_active.ids[sats_active.count++] = (uint8_t)id;
-					}
-					if (p) p = strchr(p, ','); // Переходим к следующей запятой
-					if (p) p++;
-				}
-			}
-			// Если поймали GLL — блок данных от Neo-6M закончился
-			//if (strstr(buffer, "GLL")) break;
-		}
-
-		// Стандартная обработка данных NeoGPS
-		gps.handle(c);
-	}
-
-	//if (gps.available(gpsPort)) {
-	if (gps.available()) {
-		fix = gps.read();
-
-		// Update GPS info
-		if (fix.valid.time) {
-			report.timestamp = (uint32_t)fix.dateTime;
-			sync_clock(fix.dateTime);
-		}
-
-		if (fix.valid.location) {
-			report.lat = fix.latitude();
-			report.lon = fix.longitude();
-		}
-
-		if (fix.valid.altitude) {
-			report.alt = (int16_t)fix.altitude();
-		}
-
-		if (fix.valid.hdop) {
-			report.accuracy = hdopToAccuracy(fix.hdop);
-		}
-		else {
-			report.accuracy = 999;
-		}
-
-		report.bat_charge = battery.getPercentage();
-
-		// NOTE: Used only in browser, store as ExtendedInfo structure
-		report.blocks_total = logger.blocksTotal();
-		report.blocks_used = logger.blocksUsed();
-		report.heap_free = ESP.getFreeHeap();
-		report.heap_max = ESP.getMaxFreeBlockSize();
-		report.ap_clients = WiFi.softAPgetStationNum();
-		report.saved_points = logger.pointsSaved();
-		report.current_block = logger.getCurrentBlockID();
-
-		updateUI();
-		sendStats();
-
-		// DEBUG
-		// Warning: Too heavy! Can crash (stack overflow)
+		// Update time
 		time_t now = time(nullptr) + (cfg.tz_offset * 60);
-		struct tm* ptm = gmtime(&now);
-		Serial.printf("[%02d.%02d.%04d %02d:%02d:%02d]", ptm->tm_mday, ptm->tm_mon + 1, ptm->tm_year + 1900, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
+		struct tm ptm = *gmtime(&now);
+		gui.draw_time(&ptm);
+
+		// Update battery
+		gui.draw_battery(battery.getPercentage());
+
+#ifdef SERIAL_DEBUG
+		unsigned long totalSeconds = millis() / 1000;
+		int seconds = totalSeconds % 60;
+		int minutes = (totalSeconds / 60) % 60;
+		int hours = (totalSeconds / 3600);
+		Serial.printf("[ UPTIME: %4d:%02d:%02d ]", hours, minutes, seconds);
 		Serial.printf(" | HEAP: %5d", ESP.getFreeHeap());
 		Serial.printf(" | BAT: %3d%% (%7.4fv) ", battery.getPercentage(), battery.getVoltage());
 		Serial.printf(" | BLK: %3d/%3d PTS: %7d in #%3d", logger.blocksUsed(), logger.blocksTotal(), logger.pointsSaved(), logger.getCurrentBlockID());
-		Serial.printf(" | LAT: %9.5f LON: %10.5f ALT: %7.4f HDOP: %7.4f ACC: %3d SATS: %2d/%2d", fix.latitude(), fix.longitude(), fix.altitude(), (float)(fix.hdop / 1000), hdopToAccuracy(fix.hdop), fix.satellites, gps.sat_count);
 		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
 		Serial.println();
+#endif
 	}
 
 	if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
-		lastScanMillis = millis();
-		//while (web.isBusy()) { yield(); delay(10); }
-		if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() < 0) {
-			WiFi.scanNetworks(true, true); // Асинхронно
+		if (gps.fix && gps.acc <= cfg.min_acc) {
+			if (WiFi.scanComplete() < 0) {
+				WiFi.scanNetworks(true, true); // Run async, scan hidden
+				gui.draw_wifi_status(WIFI_SCAN_RUNNING);
+
+				gpsPointA = { gps.lat, gps.lon, gps.altitude(), gps.acc };
+				gpsPointB = { 0 }; // null all fields
+
+				lastScanMillis = millis();
+			}
+			else {
+				// Wait until scan completed? (Allow run other code in loop()!)
+			}
 		}
 	}
 
 	if (WiFi.scanComplete() >= 0) {
-		sendWiFiScanResult();
+		updateWiFiGraph();
+		//gui.draw_wifi_status(WiFi.scanComplete());
 
-		if (fix.valid.location && report.accuracy <= cfg.min_acc && WiFi.scanComplete() < 0) {
-			logger.storeRecord(report.timestamp, report.lat, report.lon, report.alt, report.accuracy, report.bat_charge);
+		sendWiFiScanResult(); // to browser/websocket
+
+		// Check if GPS still accurate and current scan initiated by cfg.scan_interval timer, not by user (web)
+		if (gps.fix && gps.acc <= cfg.min_acc && gpsPointB.lat == 0.0 && gpsPointB.lon == 0.0) {
+			// Calculate gps midpoint for accuracy
+			gpsPointB = { gps.lat, gps.lon, gps.altitude(), gps.acc };
+			gpsPointA = gps.get_midpoint(gpsPointA, gpsPointB);
+			logger.storeRecord(gps.get_timestamp(), gpsPointA.lat, gpsPointA.lon, gpsPointA.alt, gpsPointA.acc, battery.getPercentage());
+
+			gui.draw_points(logger.pointsSaved());
+			gui.draw_flash_used(map(logger.blocksUsed(), 0, logger.blocksTotal(), 0, 100));
 		}
 
 		WiFi.scanDelete();
 	}
 
-	web.update();
-
 	if (logger.needErase()) {
+#ifdef SERIAL_DEBUG
 		Serial.println();
-		Serial.println(F("!!! ERASING FLASH !!!"));
+		Serial.println("!!! ERASING FLASH !!!");
 		Serial.println();
-
-		screen.clear();
-		screen.setScale(2);
-		screen.setCursorXY(0, 0);
-		screen.print(F("ERASING..."));
-		screen.setScale(1);
-		screen.update();
+#endif
+		gui.clear_screen();
+		gui.draw_text(0, 0, 2, "ERASING...");
+		// Update screen?
 
 		logger.eraseFlash([](int percent) {
-			screen.rect(0, 16, 127, 31, OLED_CLEAR);
-			screen.setCursorXY(6 * 9, 16);
-			screen.printf("%3d%%", percent);
-			screen.rect(0, 24, 127, 31, OLED_STROKE);
-			uint8_t w = map(percent, 0, 100, 2, 125);
-			screen.rect(2, 26, w, 29, OLED_FILL);
-			screen.update();
-
-			Serial.print(F("Progress: ")); Serial.print(percent); Serial.println("%");
+			gui.draw_progress(percent);
 			});
-
-		screen.clear();
-		screen.update();
+		gui.clear_screen();
 	}
 
-	if (millis() - lastBatteryUpdate >= 1000) {
-		lastBatteryUpdate = millis();
-		battery.update();
+	if (battery.is_low()) {
+#ifdef SERIAL_DEBUG
+		Serial.println(F("Battery low! Shutting down..."));
+#endif
+		gui.draw_text(0, 0, 2, "LOW BAT");
+		gui.redraw();
 
-		if (battery.is_low()) {
-			Serial.println(F("Battery low! Shutting down..."));
-			screen.clear();
-			screen.setScale(2);
-			screen.setCursorXY(0, 8);
-			screen.print(F("LOW BAT"));
-			screen.update();
-			for (int i = 0; i < 30; i++) {
-				delay(100);
-				yield();
-			}
-
-			web.end();
-
-			WiFi.disconnect(true);
+		for (int i = 0; i < 30; i++) {
 			delay(100);
-			WiFi.mode(WIFI_OFF);
-			WiFi.forceSleepBegin();
-			delay(1);
-
-
-			ESP.deepSleep(0); // Turn off device
-			//while (true) { yield(); } // Stop loop()
+			yield();
 		}
+
+		web.end();
+
+		WiFi.disconnect(true);
+		delay(100);
+		WiFi.mode(WIFI_OFF);
+		WiFi.forceSleepBegin();
+		delay(1);
+
+		ESP.deepSleep(0); // Turn off device
+		//while (true) { yield(); } // Stop loop()
 	}
 }
