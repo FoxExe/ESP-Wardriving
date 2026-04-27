@@ -4,8 +4,10 @@
 #include <ESP8266WiFi.h>
 
 
-#define MAX_SAT_BARS 16
-#define MAX_WIFI_BARS 25  // (128 - 78) / 2 = graph width / (bar_width + padding_right)
+#define MAX_BARS_2PX 16
+#define MAX_BARS_1PX 25
+#define MAX_WIFI_CHANNELS 14 // JP=14, EU=13, Others=11-12
+
 
 class GUI {
 private:
@@ -35,5 +37,5 @@ public:
 	void draw_wifi_status(int8_t status);
 
 	void draw_graph_gps(int* values, bool* is_used, unsigned int count);
-	void draw_graph_wifi(int* values, bool* is_open, unsigned int count);
+	void draw_graph_wifi(int* values);
 };

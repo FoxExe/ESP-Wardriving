@@ -205,12 +205,12 @@ void GUI::draw_wifi_status(int8_t status) {
 
 void GUI::draw_graph_gps(int* values, bool* is_used, unsigned int count) {
 	_screen.rect(0, 8, 47, 31, OLED_CLEAR);
-	_draw_graph(0, 8, 23, 0, 99, 2, values, count > MAX_SAT_BARS ? MAX_SAT_BARS : count, is_used);
+	_draw_graph(0, 8, 23, 0, 99, 2, values, count > MAX_BARS_2PX ? MAX_BARS_2PX : count, is_used);
 	_screen.update();
 }
 
-void GUI::draw_graph_wifi(int* values, bool* is_open, unsigned int count) {
+void GUI::draw_graph_wifi(int* values) {
 	_screen.rect(78, 8, 127, 31, OLED_CLEAR);
-	_draw_graph(78, 8, 23, -90, -40, 1, values, count > MAX_WIFI_BARS ? MAX_WIFI_BARS : count, is_open);
+	_draw_graph(78, 8, 23, -100, -40, 2, values, MAX_WIFI_CHANNELS);
 	_screen.update();
 }

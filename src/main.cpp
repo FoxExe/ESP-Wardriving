@@ -143,7 +143,7 @@ void sendWiFiScanResult() {
 
 	web.sendWSData(buffer.data(), buffer.size());
 }
-
+/*
 void updateWiFiGraph() {
 	int8_t scanned = WiFi.scanComplete();
 	if (scanned <= 0) return;
@@ -157,6 +157,22 @@ void updateWiFiGraph() {
 	}
 
 	gui.draw_graph_wifi(rssi_values, is_open, scanned);
+}
+*/
+void updateWiFiGraph() {
+	int8_t scanned = WiFi.scanComplete();
+	if (scanned <= 0) return;
+
+	int values[MAX_WIFI_CHANNELS];
+	for (int i = 0; i < MAX_WIFI_CHANNELS; i++) values[i] = -100;
+
+	for (int i = 0; i < scanned; i++) {
+		int ch = WiFi.channel(i) - 1;
+		int rssi = WiFi.RSSI(i);
+		if (rssi > values[ch]) values[ch] = rssi;
+	}
+
+	gui.draw_graph_wifi(values);
 }
 
 void handleButtons() {
@@ -212,7 +228,7 @@ void setup() {
 
 	// GPS
 	gui.draw_loading("GPS");
-	gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 128); // Increase buffer
+	gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 192); // Increase buffer
 	//Serial.begin(9600); // GPS
 	//Serial.setRxBufferSize(512);
 
