@@ -46,47 +46,16 @@ struct CurrentReport {
 #pragma pack(pop)
 
 void handleGpsUpdate() {
-	// Fill report
-	report.timestamp = gps.get_timestamp();
-	report.lat = gps.lat;
-	report.lon = gps.lon;
-	report.alt = gps.altitude();
-	report.acc = gps.acc;
-	report.bat_charge = battery.getPercentage();
-	report.blocks_total = logger.blocksTotal();
-	report.blocks_used = logger.blocksUsed();
-	report.heap_free = ESP.getFreeHeap();
-	report.heap_max = ESP.getMaxFreeBlockSize();
-	report.ap_clients = WiFi.softAPgetStationNum();
-	report.saved_points = logger.pointsSaved();
-	report.current_block = logger.getCurrentBlockID();
-
-	// Send report
-	uint16_t size = 1 + sizeof(report) + (sizeof(GPSSatellite) * gps.satellites_count);
-	uint8_t* buff = (uint8_t*)malloc(size);
-	if (buff == nullptr) return;
-
-	buff[0] = 0x01; // This is report packet
-
-	memcpy(&buff[1], &report, sizeof(report));
-
-	// Set satellites detailed info
-	if (gps.satellites_count > 0) {
-		memcpy(&buff[1 + sizeof(report)], gps.satellites, sizeof(GPSSatellite) * gps.satellites_count);
-	}
-
-	web.sendWSData(buff, size); // Send report throught websocket
-	free(buff);
-
 	// Updatre GPS graph
 	int snr_values[gps.satellites_count];
 	bool tracked[gps.satellites_count];
+
 	for (int i = 0; i < gps.satellites_count; i++) {
 		snr_values[i] = gps.satellites[i].snr;
 		tracked[i] = gps.satellites[i].is_used;
 	}
-	gui.draw_graph_gps(snr_values, tracked, gps.satellites_count);
 
+	gui.draw_graph_gps(snr_values, tracked, gps.satellites_count);
 	gui.draw_isrunning_icon(gps.fix && gps.acc <= cfg.min_acc);
 	gui.draw_accuracy(gps.acc > 999 ? 999 : gps.acc);
 
@@ -100,7 +69,7 @@ void handleGpsUpdate() {
 		int bars = map(gps.satellites[i].snr, 0, 100, 0, 32);
 		for (int j = 0; j < bars; ++j) { Serial.print("#"); }
 		Serial.println("");
-	}
+}
 #endif
 }
 
@@ -298,6 +267,38 @@ void loop() {
 
 		// Update battery
 		gui.draw_battery(battery.getPercentage());
+
+		// Fill report
+		report.timestamp = gps.get_timestamp();
+		report.lat = gps.lat;
+		report.lon = gps.lon;
+		report.alt = gps.altitude();
+		report.acc = gps.acc;
+		report.bat_charge = battery.getPercentage();
+		report.blocks_total = logger.blocksTotal();
+		report.blocks_used = logger.blocksUsed();
+		report.heap_free = ESP.getFreeHeap();
+		report.heap_max = ESP.getMaxFreeBlockSize();
+		report.ap_clients = WiFi.softAPgetStationNum();
+		report.saved_points = logger.pointsSaved();
+		report.current_block = logger.getCurrentBlockID();
+
+		// Send report
+		uint16_t size = 1 + sizeof(report) + (sizeof(GPSSatellite) * gps.satellites_count);
+		uint8_t* buff = (uint8_t*)malloc(size);
+		if (buff == nullptr) return;
+
+		buff[0] = 0x01; // This is report packet
+
+		memcpy(&buff[1], &report, sizeof(report));
+
+		// Set satellites detailed info
+		if (gps.satellites_count > 0) {
+			memcpy(&buff[1 + sizeof(report)], gps.satellites, sizeof(GPSSatellite) * gps.satellites_count);
+		}
+
+		web.sendWSData(buff, size); // Send report throught websocket
+		free(buff);
 
 #ifdef SERIAL_DEBUG
 		unsigned long totalSeconds = millis() / 1000;
