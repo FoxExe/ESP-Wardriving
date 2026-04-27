@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 
-LOG_DUMP = "log_109.bin"
+LOG_DUMP = "log_67.bin"
 
 
 NEOGPS_EPOCH = 946684800
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
 				gps_cnt += 1
 				print(f"--- {gps_cnt:>4d} ---")
-				print(f"0x{pos:08X} >>>> {dt} [{lat:.5f} {lon:.5f}] {alt}m, {acc}m, {bat}%")
+				print(f"0x{pos:08X} >>>> [{dt}]  {lat:.5f},{lon:.5f}  ALT: {alt}m  ACC: {acc}m  BAT: {bat}%")
 				for i in range(cnt):
 					pos_rssi = f.tell()
 					data = f.read(S_SIG.size)
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 		print("-" * 64)
 		print("Block  GPS  APs")
 		for i, s in stats.items():
-			print(f"{i:5d} {s[0]:4d} {s[1]:4d}")
+			print(f"{(i + 1):5d} {s[0]:4d} {s[1]:4d}")
 
 
 """
