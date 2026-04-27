@@ -7,7 +7,7 @@
 		<link rel="stylesheet" href="bootstrap.min.css" />
 		<link rel="stylesheet" href="style.css" />
 
-		<link rel="icon" type="image/x-icon" href="/favicon.ico">
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
 		<!-- Signal reception communication wifi Icon by Crumbs and Pixels on <a href="https://icon-icons.com/authors/255-crumbs-and-pixels">Icon-Icons.com</a> -->
 	</head>
 	<body class="bg-light is-offline">
@@ -236,20 +236,23 @@
 							<div class="row g-2">
 								<div class="col-4">
 									<div class="bg-light p-2 rounded text-center border">
+										<div class="small text-muted">Подключено:</div>
 										<div class="h5 mb-0 fw-bold" id="sys-clients">--</div>
 										<div class="small text-muted">Web-Клиентов</div>
 									</div>
 								</div>
 								<div class="col-4">
 									<div class="bg-light p-2 rounded text-center border">
-										<div class="h5 mb-0 fw-bold" id="gps-count">--</div>
-										<div class="small text-muted">Точек</div>
+										<div class="small text-muted">Записываем в:</div>
+										<div class="h5 mb-0 fw-bold" id="current-block">--</div>
+										<div class="small text-muted">Блок</div>
 									</div>
 								</div>
 								<div class="col-4">
 									<div class="bg-light p-2 rounded text-center border">
-										<div class="h5 mb-0 fw-bold" id="current-block">--</div>
-										<div class="small text-muted">Текущий блок</div>
+										<div class="small text-muted">Записано:</div>
+										<div class="h5 mb-0 fw-bold" id="gps-count">--</div>
+										<div class="small text-muted">Точек</div>
 									</div>
 								</div>
 							</div>
