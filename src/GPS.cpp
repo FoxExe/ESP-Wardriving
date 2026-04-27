@@ -139,12 +139,10 @@ uint32_t parseTimeToNum(const char* f) {
 }
 
 void UbloxGPS::_parseNMEA(char* line) {
-	/*
 #ifdef SERIAL_DEBUG
 	Serial.print("[GPS] ");
 	Serial.println(line);
 #endif
-	*/
 
 	char* star = strrchr(line, '*');
 	if (!star) return;
@@ -204,7 +202,6 @@ void UbloxGPS::_parseNMEA(char* line) {
 			_current_time.tm_mon = ((f[2] - '0') * 10 + (f[3] - '0')) - 1;
 			_current_time.tm_year = ((f[4] - '0') * 10 + (f[5] - '0')) + 100;
 		}
-
 	}
 	else if (strncmp(line, "$GPVTG", 6) == 0) {
 		// $GPVTG,,T,,M,0.059,N,0.110,K,A*2F
@@ -217,7 +214,6 @@ void UbloxGPS::_parseNMEA(char* line) {
 		// Speed
 		_parseField(line, 5, f, sizeof(f));
 		if (f[0] != '\0') _speed_knots = atof(f);
-
 	}
 	else if (strncmp(line, "$GPGGA", 6) == 0) {
 		// $GPGGA,182113.00,,,,,0,03,7.66,,,,,,*5A
@@ -230,7 +226,6 @@ void UbloxGPS::_parseNMEA(char* line) {
 
 		_parseField(line, 9, f, sizeof(f)); // Altitude
 		if (f[0] != '\0') _last_altitude = atof(f);
-
 	}
 	else if (strncmp(line, "$GPGSA", 6) == 0) {
 		// $GPGSA,A,1,26,28,31,,,,,,,,,,7.73,7.66,1.00*09
@@ -273,7 +268,6 @@ void UbloxGPS::_parseNMEA(char* line) {
 				satellites_count++;
 			}
 		}
-
 	}
 	else if (strncmp(line, "$GPGLL", 6) == 0) {
 		// $GPGLL,,,,,182113.00,V,N*42

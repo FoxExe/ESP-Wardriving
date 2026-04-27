@@ -33,7 +33,7 @@ HSPI_CLK   14     |5        12|    00  Program
 HSIP_MISO  12     |6        11|    02  U1_Tx
 HSPI_MOSI  13     |7        10|    15  HSPI_CS
    3.3v    Vcc    |8        9 |    GND
-                  `````````````
+                   ````````````
 ```
 
 ### Делитель напряжения:

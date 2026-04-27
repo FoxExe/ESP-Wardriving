@@ -3,7 +3,7 @@
 #include <EncButton.h>
 #include <time.h>
 #include <LwipDhcpServer.h>
-//#include <SoftwareSerial.h>
+#include <SoftwareSerial.h>
 
 #include "Logger.h"
 #include "Battery.h"
@@ -16,9 +16,9 @@
 WebServer web(80);
 EncButton btn(0);
 GUI gui;
-//SoftwareSerial gpsPort(15, 2);
-//UbloxGPS gps(gpsPort);
-UbloxGPS gps(Serial);
+SoftwareSerial gpsPort(15, 2);
+UbloxGPS gps(gpsPort);
+//UbloxGPS gps(Serial);
 Battery battery;
 
 GPSPoint gpsPointA;
@@ -178,10 +178,7 @@ void handleButtons() {
 }
 
 void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options) {
-	// Формат опции 121: 
-	// [Маска] [Сеть (без нулей)] [IP шлюза]
-	// Для 192.168.4.0/24 через 192.168.4.1 это:
-	// 18 (24 маска) + C0 A8 04 (192.168.4) + C0 A8 04 01 (192.168.4.1)
+	// Append route to 192.168.4.0/24
 	uint8_t route_data[] = { 0x18, 0xC0, 0xA8, 0x04, 0xC0, 0xA8, 0x04, 0x01 };
 	options.add(121, route_data, sizeof(route_data));
 }
@@ -194,6 +191,7 @@ void setup() {
 
 #ifdef SERIAL_DEBUG
 	// Debug
+	//Serial1.begin(115200); // Debug
 	Serial.begin(115200);
 	Serial.println();
 	Serial.println(F("Loading..."));
@@ -214,9 +212,8 @@ void setup() {
 
 	// GPS
 	gui.draw_loading("GPS");
-	//gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 256); // Increase buffer
-	Serial1.begin(115200); // Debug
-	Serial.begin(9600); // GPS
+	gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 128); // Increase buffer
+	//Serial.begin(9600); // GPS
 	//Serial.setRxBufferSize(512);
 
 	// Switch module to faster speed
@@ -294,7 +291,7 @@ void loop() {
 		Serial.printf("[ UPTIME: %4d:%02d:%02d ]", hours, minutes, seconds);
 		Serial.printf(" | HEAP: %5d", ESP.getFreeHeap());
 		Serial.printf(" | BAT: %3d%% (%7.4fv) ", battery.getPercentage(), battery.getVoltage());
-		Serial.printf(" | BLK: %3d/%3d PTS: %7d in #%3d", logger.blocksUsed(), logger.blocksTotal(), logger.pointsSaved(), logger.getCurrentBlockID());
+		Serial.printf(" | USED: %3d/%3d CURRENT: %3d SAVED: %7d", logger.blocksUsed(), logger.blocksTotal(), logger.getCurrentBlockID(), logger.pointsSaved());
 		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
 		Serial.println();
 #endif
