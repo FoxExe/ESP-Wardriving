@@ -4,10 +4,9 @@ import os
 from datetime import datetime
 
 
-LOG_DUMP = "log_67.bin"
+LOG_DUMP = "log_67-71.bin"
 
 
-NEOGPS_EPOCH = 946684800
 BLOCK_SIZE = 64 * 1024
 MAGIC = 0xDDCC
 
@@ -71,10 +70,10 @@ if __name__ == "__main__":
 				if ts == 0xFFFFFFFF:
 					break
 
-				dt = datetime.fromtimestamp(ts + NEOGPS_EPOCH)
+				dt = datetime.fromtimestamp(ts)
 
 				gps_cnt += 1
-				print(f"--- {gps_cnt:>4d} ---")
+				print(f"--- Point #{gps_cnt} in block #{blk_id} --")
 				print(f"0x{pos:08X} >>>> [{dt}]  {lat:.5f},{lon:.5f}  ALT: {alt}m  ACC: {acc}m  BAT: {bat}%")
 				for i in range(cnt):
 					pos_rssi = f.tell()

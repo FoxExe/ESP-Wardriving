@@ -107,7 +107,7 @@ void GUI::draw_progressbar(int x, int y, int w, int h, int val, int val_min, int
 
 void GUI::draw_loading(const char* msg) {
 #ifdef SERIAL_DEBUG
-	Serial.println(msg); // Debug
+	Serial1.println(msg); // Debug
 #endif
 	_screen.clear();
 	draw_text(0, 0, 2, "LOADING");
@@ -117,7 +117,7 @@ void GUI::draw_loading(const char* msg) {
 
 void GUI::draw_progress(int value) {
 #ifdef SERIAL_DEBUG
-	Serial.printf("Progress: %3d%%", value);
+	Serial1.printf("Progress: %3d%%", value);
 #endif
 	draw_textf(9 * 6, 16, 1, 4, "%3d%%", value);
 	draw_progressbar(0, 24, 128, 8, value, 0, 100);

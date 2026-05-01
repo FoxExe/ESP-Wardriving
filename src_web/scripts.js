@@ -167,14 +167,19 @@ function parseStatusPacket(dv) {
 
 	// Спутники
 	const sats = [];
-	const SAT_SIZE = 3;
+	const SAT_SIZE = 6; // 6 bytes NMEAGPS::satellite_view_t
 
 	while (offset + SAT_SIZE <= dv.byteLength) {
-		sats.push({
-			id: dv.getUint8(offset),
-			snr: dv.getUint8(offset + 1),
-			tracked: dv.getUint8(offset + 2) !== 0
-		});
+		const id = dv.getUint8(offset);
+		if (id !== 0) {
+			sats.push({
+				id: id,
+				el: dv.getUint8(offset + 1),
+				az: dv.getUint16(offset + 2, true),
+				snr: dv.getUint8(offset + 4),
+				tracked: dv.getUint8(offset + 5)
+			});
+		}
 		offset += SAT_SIZE;
 	}
 
@@ -270,7 +275,7 @@ function renderSatBars(sats) {
 		let color = 'bg-danger';
 		if (s.snr > 35) color = 'bg-success';
 		else if (s.snr > 22) color = 'bg-warning';
-		return `<div class="d-flex flex-column align-items-center flex-grow-1" style="max-width:20px">
+		return `<div class="d-flex flex-column align-items-center flex-grow-1" style="max-width:20px" title="EL: ${s.el}, AZ: ${s.az}">
             <span style="font-size:8px">${s.id}</span>
             <div class="progress w-100 rounded-0" style="height:70px; flex-direction:column-reverse; display:flex">
                 <div class="progress-bar ${color}" style="height:${s.snr}%"></div>

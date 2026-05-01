@@ -1,31 +1,38 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <EncButton.h>
 #include <time.h>
+
+#include <EncButton.h>
 #include <LwipDhcpServer.h>
-#include <SoftwareSerial.h>
+#include <NMEAGPS.h>
+
+//#include <SoftwareSerial.h>
 
 #include "Logger.h"
 #include "Battery.h"
 #include "Settings.h"
 #include "WebServer.h"
 #include "GUI.h"
-#include "GPS.h"
+#include "GPS_Utils.h"
 
+
+#define CLOCK_SYNC_INTEVAL (1000 * 60 * 60 * 24) // 24 hours = 1 day = 86400000 ms (millis())
 
 WebServer web(80);
 EncButton btn(0);
-GUI gui;
-SoftwareSerial gpsPort(15, 2);
-UbloxGPS gps(gpsPort);
-//UbloxGPS gps(Serial);
 Battery battery;
+GUI gui;
 
-GPSPoint gpsPointA;
-GPSPoint gpsPointB;
+//SoftwareSerial gpsPort(15, 2);
+NMEAGPS gps;
+UbloxGPS gps_ctrl(Serial); // gpsPort
+GPSPoint gpsPointA = { 0 };
+GPSPoint gpsPointB = { 0 };
 
 unsigned long lastScanMillis = 0;
 unsigned long lastScreenUpdate = 0;
+unsigned long lastClockSync = 0;
+bool process_point = false;
 
 #pragma pack(push, 1)
 struct CurrentReport {
@@ -45,31 +52,83 @@ struct CurrentReport {
 } report;
 #pragma pack(pop)
 
-void handleGpsUpdate() {
+void handleGpsUpdate(gps_fix& fix) {
 	// Updatre GPS graph
-	int snr_values[gps.satellites_count];
-	bool tracked[gps.satellites_count];
-
-	for (int i = 0; i < gps.satellites_count; i++) {
+	int snr_values[gps.sat_count];
+	bool tracked[gps.sat_count];
+	uint8_t sat_used = 0;
+	for (uint8_t i = 0; i < gps.sat_count; i++) {
 		snr_values[i] = gps.satellites[i].snr;
-		tracked[i] = gps.satellites[i].is_used;
+		tracked[i] = gps.satellites[i].tracked;
+		if (gps.satellites[i].tracked) sat_used++;
+	}
+	gui.draw_graph_gps(snr_values, tracked, gps.sat_count);
+	uint16_t acc = fix.valid.hdop ? hdopToAccuracy(fix.hdop) : 999;
+	gui.draw_accuracy(acc);
+	gui.draw_isrunning_icon(fix.valid.location && acc <= cfg.min_acc);
+
+	// Sync system time, if possible
+	if (fix.valid.date && fix.valid.time) {
+		uint32_t timestamp = (NeoGPS::clock_t)fix.dateTime + Y2K_OFFSET;
+		report.timestamp = timestamp;
+
+		if (lastClockSync == 0 || millis() - lastClockSync >= CLOCK_SYNC_INTEVAL) {
+			// Set system time
+			timeval tv;
+			tv.tv_sec = timestamp;
+			tv.tv_usec = 0;
+			settimeofday(&tv, NULL);
+			lastClockSync = millis();
+		}
+
+		if (fix.valid.location) {
+			// Note: With 2D-Fix code below won't run
+			report.lat = fix.latitude();
+			report.lon = fix.longitude();
+			report.alt = fix.altitude();
+			report.acc = hdopToAccuracy(fix.hdop);
+
+			if (acc <= cfg.min_acc) {
+				if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
+					if (WiFi.scanComplete() < 0) {
+						WiFi.scanNetworks(true, true); // Run async, scan hidden networks
+						gui.draw_wifi_status(WIFI_SCAN_RUNNING);
+						gpsPointA = { fix.latitude(), fix.longitude(), fix.altitude(), hdopToAccuracy(fix.hdop), timestamp };
+						lastScanMillis = millis();
+						process_point = true;
+					}
+				}
+
+				if (process_point && WiFi.scanComplete() > 0) {
+					gpsPointB = { fix.latitude(), fix.longitude(), fix.altitude(), hdopToAccuracy(fix.hdop), timestamp };;
+					if (gpsPointB.ts - gpsPointA.ts < 10) {
+						GPSPoint tmp = getGPSMidpoint(gpsPointA, gpsPointB);
+						logger.storeRecord(tmp.ts, tmp.lat, tmp.lon, tmp.alt, tmp.acc, battery.getPercentage());
+						gui.draw_points(logger.pointsSaved());
+						gui.draw_flash_used(map(logger.blocksUsed(), 0, logger.blocksTotal(), 0, 100));
+					}
+					else {
+						// Something wrong. WiFi scan too long.
+					}
+					WiFi.scanDelete();
+					process_point = false;
+				}
+			}
+		}
 	}
 
-	gui.draw_graph_gps(snr_values, tracked, gps.satellites_count);
-	gui.draw_isrunning_icon(gps.fix && gps.acc <= cfg.min_acc);
-	gui.draw_accuracy(gps.acc > 999 ? 999 : gps.acc);
-
 #ifdef SERIAL_DEBUG
-	struct tm ptm = gps.get_time();
-	Serial.printf("[%02d.%02d.%04d %02d:%02d:%02d]", ptm.tm_mday, ptm.tm_mon + 1, ptm.tm_year + 1900, ptm.tm_hour, ptm.tm_min, ptm.tm_sec);
-	Serial.printf(" | LAT: %10.6f  LON: %11.6f  ALT: %7.4f  HDOP: %7.4f  ACC: %6.2f  SATS: %2d/%2d", gps.lat, gps.lon, gps.altitude(), gps.hdop, gps.acc, gps.sat_used(), gps.sat_total());
-	Serial.println("\n\tID   RSSI U SIGNAL");
-	for (int i = 0; i < gps.satellites_count; i++) {
-		Serial.printf("\t%2d %3ddbm %d ", gps.satellites[i].id, gps.satellites[i].snr, gps.satellites[i].is_used);
+	time_t now = time(nullptr);
+	struct tm* ptm = localtime(&now);
+	Serial1.printf("[%02d.%02d.%04d %02d:%02d:%02d]", ptm->tm_mday, ptm->tm_mon + 1, ptm->tm_year + 1900, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
+	Serial1.printf(" | LAT: %10.6f  LON: %11.6f  ALT: %7.4f  ACC: %4d  SATS: %2d/%2d", fix.latitude(), fix.longitude(), fix.altitude(), hdopToAccuracy(fix.hdop), sat_used, gps.sat_count);
+	Serial1.println("\n\tID   RSSI U SIGNAL");
+	for (uint8_t i = 0; i < gps.sat_count; i++) {
+		Serial1.printf("\t%2d %3ddbm %d ", gps.satellites[i].id, gps.satellites[i].snr, gps.satellites[i].tracked);
 		int bars = map(gps.satellites[i].snr, 0, 100, 0, 32);
-		for (int j = 0; j < bars; ++j) { Serial.print("#"); }
-		Serial.println("");
-}
+		for (int j = 0; j < bars; ++j) { Serial1.print("#"); }
+		Serial1.println("");
+	}
 #endif
 }
 
@@ -112,6 +171,7 @@ void sendWiFiScanResult() {
 
 	web.sendWSData(buffer.data(), buffer.size());
 }
+
 /*
 void updateWiFiGraph() {
 	int8_t scanned = WiFi.scanComplete();
@@ -128,6 +188,7 @@ void updateWiFiGraph() {
 	gui.draw_graph_wifi(rssi_values, is_open, scanned);
 }
 */
+
 void updateWiFiGraph() {
 	int8_t scanned = WiFi.scanComplete();
 	if (scanned <= 0) return;
@@ -146,20 +207,21 @@ void updateWiFiGraph() {
 
 void handleButtons() {
 	btn.tick();
+	/*
+		if (btn.click()) {
+			gps_ctrl.wakeUp();
+	#ifdef SERIAL_DEBUG
+			Serial1.println(F("GPS IS ON"));
+	#endif
+		}
 
-	if (btn.click()) {
-		gps.start();
-#ifdef SERIAL_DEBUG
-		Serial.println(F("GPS IS ON"));
-#endif
-	}
-
-	if (btn.hold()) {
-		gps.stop();
-#ifdef SERIAL_DEBUG
-		Serial.println(F("GPS IS OFF"));
-#endif
-	}
+		if (btn.hold()) {
+			gps_ctrl.shutdown();
+	#ifdef SERIAL_DEBUG
+			Serial1.println(F("GPS IS OFF"));
+	#endif
+		}
+	*/
 }
 
 void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options) {
@@ -170,17 +232,13 @@ void onDhcpOptions(const DhcpServer& server, DhcpServer::OptionsBuffer& options)
 
 // ================================================================
 void setup() {
-	// Fix internal timer
-	//struct timeval tv = { .tv_sec = 946684800, .tv_usec = 0 };
-	//settimeofday(&tv, nullptr);
-
 #ifdef SERIAL_DEBUG
 	// Debug
 	//Serial1.begin(115200); // Debug
-	Serial.begin(115200);
-	Serial.println();
-	Serial.println(F("Loading..."));
-	Serial.println();
+	Serial1.begin(115200);
+	Serial1.println();
+	Serial1.println(F("Loading..."));
+	Serial1.println();
 #endif
 
 	// Button (GPIO-0)
@@ -197,20 +255,13 @@ void setup() {
 
 	// GPS
 	gui.draw_loading("GPS");
-	gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 192); // Increase buffer
-	//Serial.begin(9600); // GPS
-	//Serial.setRxBufferSize(512);
-
-	// Switch module to faster speed
-	//gps.setUpdateRate(500); // Update rate 1Hz -> 2Hz, up to 10Hz
-	/*! WARNING: SoftwareSerial can't handle more than 9600! Even in overclock mode (160MHz CPU)
-	gps.reconfigure(115200);
-	gpsPort.flush();
-	gpsPort.end();
+	//gpsPort.begin(9600);
+	//gpsPort.begin(9600, SWSERIAL_8N1, 15, 2, false, 256); // Increase buffer up to [8 * 82 * 2]
+	Serial.begin(9600);
+	gps_ctrl.setBaudRate(115200);
 	delay(100);
-	gpsPort.begin(115200);
-	*/
-	gps.on_update = handleGpsUpdate;
+	Serial.begin(115200);
+	Serial.setRxBufferSize(512);
 
 	// Configure Wi-Fi
 	gui.draw_loading("Wi-Fi");
@@ -245,13 +296,23 @@ void setup() {
 // ================================================================
 void loop() {
 	/* DEBUG
-	if (gpsPort.available()) {
-		Serial.write(gpsPort.read());
+	if (Serial.available()) {
+		Serial1.write(Serial.read());
 	}
 	return;
 	*/
 
-	gps.update();
+	if (WiFi.scanComplete() >= 0) {
+		updateWiFiGraph();
+		sendWiFiScanResult(); // to browser/websocket
+		if (!process_point) WiFi.scanDelete();
+	}
+
+	while (gps.available(Serial)) {
+		gps_fix fix = gps.read();
+		handleGpsUpdate(fix);
+	}
+
 	web.update();
 	battery.update();
 	handleButtons();
@@ -269,11 +330,6 @@ void loop() {
 		gui.draw_battery(battery.getPercentage());
 
 		// Fill report
-		report.timestamp = gps.get_timestamp();
-		report.lat = gps.lat;
-		report.lon = gps.lon;
-		report.alt = gps.altitude();
-		report.acc = gps.acc;
 		report.bat_charge = battery.getPercentage();
 		report.blocks_total = logger.blocksTotal();
 		report.blocks_used = logger.blocksUsed();
@@ -284,17 +340,17 @@ void loop() {
 		report.current_block = logger.getCurrentBlockID();
 
 		// Send report
-		uint16_t size = 1 + sizeof(report) + (sizeof(GPSSatellite) * gps.satellites_count);
+		uint16_t size = 1 + sizeof(report) + (sizeof(NMEAGPS::satellite_view_t) * gps.sat_count);
 		uint8_t* buff = (uint8_t*)malloc(size);
 		if (buff == nullptr) return;
 
-		buff[0] = 0x01; // This is report packet
+		buff[0] = 0x01; // It's a report packet
 
 		memcpy(&buff[1], &report, sizeof(report));
 
 		// Set satellites detailed info
-		if (gps.satellites_count > 0) {
-			memcpy(&buff[1 + sizeof(report)], gps.satellites, sizeof(GPSSatellite) * gps.satellites_count);
+		if (gps.sat_count > 0) {
+			memcpy(&buff[1 + sizeof(report)], gps.satellites, sizeof(NMEAGPS::satellite_view_t) * gps.sat_count);
 		}
 
 		web.sendWSData(buff, size); // Send report throught websocket
@@ -305,57 +361,20 @@ void loop() {
 		int seconds = totalSeconds % 60;
 		int minutes = (totalSeconds / 60) % 60;
 		int hours = (totalSeconds / 3600);
-		Serial.printf("[ UPTIME: %4d:%02d:%02d ]", hours, minutes, seconds);
-		Serial.printf(" | HEAP: %5d", ESP.getFreeHeap());
-		Serial.printf(" | BAT: %3d%% (%7.4fv) ", battery.getPercentage(), battery.getVoltage());
-		Serial.printf(" | USED: %3d/%3d CURRENT: %3d SAVED: %7d", logger.blocksUsed(), logger.blocksTotal(), logger.getCurrentBlockID(), logger.pointsSaved());
-		Serial.printf(" | WIFI: %2d", WiFi.scanComplete());
-		Serial.println();
+		Serial1.printf("[ UPTIME: %4d:%02d:%02d ]", hours, minutes, seconds);
+		Serial1.printf(" | HEAP: %5d", ESP.getFreeHeap());
+		Serial1.printf(" | BAT: %3d%% (%7.4fv) ", battery.getPercentage(), battery.getVoltage());
+		Serial1.printf(" | USED: %3d/%3d CURRENT: %3d SAVED: %7d", logger.blocksUsed(), logger.blocksTotal(), logger.getCurrentBlockID(), logger.pointsSaved());
+		Serial1.printf(" | WIFI: %2d", WiFi.scanComplete());
+		Serial1.println();
 #endif
-	}
-
-	if (millis() - lastScanMillis >= cfg.scan_interval * 1000UL) {
-		if (gps.fix && gps.acc <= cfg.min_acc) {
-			if (WiFi.scanComplete() < 0) {
-				WiFi.scanNetworks(true, true); // Run async, scan hidden
-				gui.draw_wifi_status(WIFI_SCAN_RUNNING);
-
-				gpsPointA = { gps.lat, gps.lon, gps.altitude(), gps.acc };
-				gpsPointB = { 0 }; // null all fields
-
-				lastScanMillis = millis();
-			}
-			else {
-				// Wait until scan completed? (Allow run other code in loop()!)
-			}
-		}
-	}
-
-	if (WiFi.scanComplete() >= 0) {
-		updateWiFiGraph();
-		//gui.draw_wifi_status(WiFi.scanComplete());
-
-		sendWiFiScanResult(); // to browser/websocket
-
-		// Check if GPS still accurate and current scan initiated by cfg.scan_interval timer, not by user (web)
-		if (gps.fix && gps.acc <= cfg.min_acc && gpsPointB.lat == 0.0 && gpsPointB.lon == 0.0) {
-			// Calculate gps midpoint for accuracy
-			gpsPointB = { gps.lat, gps.lon, gps.altitude(), gps.acc };
-			gpsPointA = gps.get_midpoint(gpsPointA, gpsPointB);
-			logger.storeRecord(gps.get_timestamp(), gpsPointA.lat, gpsPointA.lon, gpsPointA.alt, gpsPointA.acc, battery.getPercentage());
-
-			gui.draw_points(logger.pointsSaved());
-			gui.draw_flash_used(map(logger.blocksUsed(), 0, logger.blocksTotal(), 0, 100));
-		}
-
-		WiFi.scanDelete();
 	}
 
 	if (logger.needErase()) {
 #ifdef SERIAL_DEBUG
-		Serial.println();
-		Serial.println("!!! ERASING FLASH !!!");
-		Serial.println();
+		Serial1.println();
+		Serial1.println("!!! ERASING FLASH !!!");
+		Serial1.println();
 #endif
 		gui.clear_screen();
 		gui.draw_text(0, 0, 2, "ERASING...");
@@ -369,7 +388,7 @@ void loop() {
 
 	if (battery.is_low()) {
 #ifdef SERIAL_DEBUG
-		Serial.println(F("Battery low! Shutting down..."));
+		Serial1.println(F("Battery low! Shutting down..."));
 #endif
 		gui.draw_text(0, 0, 2, "LOW BAT");
 		gui.redraw();

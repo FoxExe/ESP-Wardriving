@@ -26,7 +26,7 @@ bool Logger::begin() {
 	_blocksUsed = 0;
 
 #ifdef SERIAL_DEBUG
-	Serial.printf("Flash init done. JEDECID: %08X, Capacity: %d\n", _flash.getJEDECID(), _flashSize);
+	Serial1.printf("Flash init done. JEDECID: %08X, Capacity: %d\n", _flash.getJEDECID(), _flashSize);
 #endif
 
 	// Search last used block
@@ -38,7 +38,7 @@ bool Logger::begin() {
 		BlockHeader bh;
 		flashReadStruct(_flash, addr, bh);
 
-		//Serial.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
+		//Serial1.printf("Block %3d@0x%08X: TS = %08X\n", i, addr, bh.timestamp);
 		if (bh.magic != BLOCK_HEADER_MAGIC) continue;
 
 		_blocksUsed++;
@@ -90,7 +90,7 @@ bool Logger::begin() {
 	}
 
 #ifdef SERIAL_DEBUG
-	Serial.printf("Logger ready. Blocks used: %d/%d. Current block: %d\n", _blocksUsed, blocksTotal(), _currentBlockAddr / DATA_BLOCK_SIZE);
+	Serial1.printf("Logger ready. Blocks used: %d/%d. Current block: %d\n", _blocksUsed, blocksTotal(), _currentBlockAddr / DATA_BLOCK_SIZE);
 #endif
 
 	return true;
@@ -323,7 +323,7 @@ void Logger::eraseFlash(std::function<void(int)> onProgress) {
 	prepareNextBlock();
 	_rotateLogs = oldState;
 #ifdef SERIAL_DEBUG
-	Serial.println(F("FLASH ERASED."));
+	Serial1.println(F("FLASH ERASED."));
 #endif
 	_requestedErase = false;
 }
@@ -334,12 +334,12 @@ bool Logger::getBlockPart(uint32_t blockIdx, uint32_t offset, uint8_t* buffer, s
 }
 
 void Logger::getUsedBlockIDs(std::function<void(int, uint32_t)> onIdFound) {
-	//Serial.println("> getUsedBlockIDs()");
+	//Serial1.println("> getUsedBlockIDs()");
 	for (uint32_t i = 0; i < blocksTotal(); i++) {
 		BlockHeader bh;
 		flashReadStruct(_flash, i * DATA_BLOCK_SIZE, bh);
 
-		//Serial.printf(">> #%3d: %04X %d\n", i, bh.magic, bh.timestamp);
+		//Serial1.printf(">> #%3d: %04X %d\n", i, bh.magic, bh.timestamp);
 
 		// Проверяем валидность блока
 		if (bh.magic == BLOCK_HEADER_MAGIC && bh.timestamp != 0xFFFFFFFF) {

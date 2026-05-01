@@ -3,7 +3,7 @@
 #include <SPIMemory.h>
 
 // Константы
-#define SPI_CS_PIN            16
+#define SPI_CS_PIN            CS  // 15, but we can use GPIO-16
 #define DATA_BLOCK_SIZE       (64 * 1024) // !DO NOT CHANGE! (Or change all "_flash.eraseBlock64K()" in code!)
 #define BLOCK_HEADER_MAGIC    0xDDCC
 #define NEOGPS_TS_OFFSET      946684800UL
