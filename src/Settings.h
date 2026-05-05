@@ -5,6 +5,8 @@
 
 // --- Конфигурация по умолчанию ---
 #define CFG_FILE "/settings.bin"
+#define WEB_PORT 80
+#define CLOCK_SYNC_INTEVAL (1000 * 60 * 60 * 24) // 24 hours = 1 day = 86400000 ms (millis())
 
 #pragma pack(push, 1)
 struct ConfigData {

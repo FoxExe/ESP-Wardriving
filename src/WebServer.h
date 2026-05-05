@@ -6,9 +6,6 @@
 #include "Settings.h"
 #include "Logger.h"
 
-#define WS_TYPE_STATS 0x01
-#define WS_TYPE_WIFI 0x02
-
 
 class WebServer {
 private:
@@ -263,6 +260,10 @@ public:
 			WiFi.softAP(cfg.ssid, cfg.pass);
 			_apChanged = false;
 		}
+	}
+
+	size_t WSConnections() {
+		return _ws.count();
 	}
 
 	bool isBusy() { return _busy; }

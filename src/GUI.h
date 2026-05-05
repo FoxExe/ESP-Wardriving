@@ -4,8 +4,8 @@
 #include <ESP8266WiFi.h>
 
 
-#define MAX_BARS_2PX 16
 #define MAX_BARS_1PX 25
+#define MAX_BARS_2PX 16
 #define MAX_WIFI_CHANNELS 14 // JP=14, EU=13, Others=11-12
 
 
@@ -15,10 +15,10 @@ private:
 
 	void _draw_graph(int x, int y, int h, int v_min, int v_max, uint8_t bar_w, int* items, uint8_t count, bool* flags = nullptr);
 public:
-	GUI();
+	void begin();
 
 	void clear_screen() { _screen.clear(); _screen.update(); }
-	void redraw() { _screen.update(); };
+	void update() { _screen.update(); };
 
 	void draw_text(int x, int y, uint8_t size, const char* text);
 	void draw_textf(int x, int y, uint8_t size, int len, const char* format, ...);

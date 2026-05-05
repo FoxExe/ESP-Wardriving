@@ -71,20 +71,26 @@ function initWebSocket() {
 	};
 
 	ws.onmessage = (event) => {
-		const dvFull = new DataView(event.data);
-		const type = dvFull.getUint8(0);
+		const packet = new DataView(event.data);
+		const type = packet.getUint8(0);
+
+		/*
+		#define REPORT_SYS 0x01
+		#define REPORT_GPS 0x02
+		#define REPORT_WIFI 0x03
+		*/
 
 		switch (type) {
-			case 0x01: // Status Packet
-				parseStatusPacket(new DataView(event.data, 1));
+			case 0x01: // REPORT_SYS
+				parseStatusPacket(packet);
 				break;
 
-			case 0x02: // WiFi Header [Type][Count]
-				parseWiFiPacket(new DataView(event.data, 1));
+			case 0x02: // REPORT_GPS
+				parseGPSPacket(packet);
 				break;
 
-			case 0x03: // WiFi Entry (Fixed 42 bytes) [Type][SSID(32)][BSSID(6)][RSSI(1)][Auth(1)][Chan(1)]
-				parseWiFiEntry(event.data);
+			case 0x03: // REPORT_WIFI
+				parseWiFiPacket(packet);
 				break;
 		}
 	};
@@ -121,6 +127,11 @@ function showAlert(message, type = 'info') {
 	container.prepend(alert);
 }
 
+function getAuthName(enc) {
+	const map = { 2: 'WPA', 4: 'WPA2', 5: 'WEP', 7: 'Открытая', 8: 'WPA/WPA2' };
+	return map[enc] || 'Unknown';
+}
+
 function updateConnStatus(online) {
 	const badge = document.getElementById('status-indicator');
 	if (online) {
@@ -146,51 +157,24 @@ function updateTimeDisplay(ts) {
 }
 
 // --- ПАРСЕРЫ ---
-
-function parseStatusPacket(dv) {
-	let offset = 0;
+function parseStatusPacket(packet) {
+	let offset = 1; // Skip packet type
 
 	// GPS position log entry
-	const gpsUnix = dv.getUint32(offset, true); offset += 4;
-	const lat = dv.getFloat32(offset, true); offset += 4;
-	const lon = dv.getFloat32(offset, true); offset += 4;
-	const alt = dv.getInt16(offset, true); offset += 2;
-	const acc = dv.getUint16(offset, true); offset += 2;
-	const battery = dv.getUint8(offset); offset += 1;
-	const blocksTotal = dv.getUint32(offset, true); offset += 4;
-	const blocksUsed = dv.getUint32(offset, true); offset += 4;
-	const freeHeap = dv.getUint32(offset, true); offset += 4;
-	const maxBlock = dv.getUint32(offset, true); offset += 4;
-	const clients = dv.getUint8(offset); offset += 1;
-	const points = dv.getUint32(offset, true); offset += 4;
-	const current_block = dv.getUint16(offset, true); offset += 2;
-
-	// Спутники
-	const sats = [];
-	const SAT_SIZE = 6; // 6 bytes NMEAGPS::satellite_view_t
-
-	while (offset + SAT_SIZE <= dv.byteLength) {
-		const id = dv.getUint8(offset);
-		if (id !== 0) {
-			sats.push({
-				id: id,
-				el: dv.getUint8(offset + 1),
-				az: dv.getUint16(offset + 2, true),
-				snr: dv.getUint8(offset + 4),
-				tracked: dv.getUint8(offset + 5)
-			});
-		}
-		offset += SAT_SIZE;
-	}
+	const battery = packet.getUint8(offset); offset += 1;
+	const blocksTotal = packet.getUint32(offset, true); offset += 4;
+	const blocksUsed = packet.getUint32(offset, true); offset += 4;
+	const freeHeap = packet.getUint32(offset, true); offset += 4;
+	const maxBlock = packet.getUint32(offset, true); offset += 4;
+	const clients = packet.getUint8(offset); offset += 1;
+	const points = packet.getUint32(offset, true); offset += 4;
+	const current_block = packet.getUint16(offset, true); offset += 2;
 
 	// Обновляем текстовые поля UI
-	document.getElementById('gps-pos').innerText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-	document.getElementById('gps-alt').innerText = alt.toFixed(1);
-	document.getElementById('gps-hdop').innerText = acc.toFixed(2);
+	document.getElementById('sys-bat').innerText = battery;
+	document.getElementById('sys-clients').innerText = clients;
 	document.getElementById('gps-count').innerText = points;
 	document.getElementById('current-block').innerText = current_block;
-	document.getElementById('sys-clients').innerText = clients;
-	document.getElementById('sys-bat').innerText = battery;
 
 	// Flash bar
 	const flashPct = (blocksUsed / blocksTotal * 100) || 0;
@@ -207,6 +191,37 @@ function parseStatusPacket(dv) {
 	// Цвет бара в зависимости от фрагментации
 	const ramBar = document.getElementById('ram-bar');
 	ramBar.className = 'progress-bar ' + (maxBlock < 8000 ? 'bg-danger' : (maxBlock < 15000 ? 'bg-warning' : 'bg-info'));
+}
+
+function parseGPSPacket(packet) {
+	let offset = 1; // Skip packet type
+
+	const gpsUnix = packet.getUint32(offset, true); offset += 4;
+	const lat = packet.getFloat32(offset, true); offset += 4;
+	const lon = packet.getFloat32(offset, true); offset += 4;
+	const alt = packet.getInt16(offset, true); offset += 2;
+	const acc = packet.getUint16(offset, true); offset += 2;
+
+	// Спутники
+	const sats = [];
+	const SAT_SIZE = 6; // 6 bytes NMEAGPS::satellite_view_t
+	while (offset + SAT_SIZE <= packet.byteLength) {
+		const id = packet.getUint8(offset);
+		if (id !== 0) {
+			sats.push({
+				id: id,
+				el: packet.getUint8(offset + 1),
+				az: packet.getUint16(offset + 2, true),
+				snr: packet.getUint8(offset + 4),
+				tracked: packet.getUint8(offset + 5)
+			});
+		}
+		offset += SAT_SIZE;
+	}
+
+	document.getElementById('gps-pos').innerText = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+	document.getElementById('gps-alt').innerText = alt.toFixed(1);
+	document.getElementById('gps-hdop').innerText = acc.toFixed(2);
 
 	// Время (GPS vs Browser)
 	updateTimeDisplay(gpsUnix);
@@ -216,60 +231,6 @@ function parseStatusPacket(dv) {
 	document.getElementById('gps-sats').innerText = `${trackedCount} / ${sats.length}`;
 
 	// Отрисовка графиков SNR
-	renderSatBars(sats);
-}
-
-function getAuthName(enc) {
-	const map = { 2: 'WPA', 4: 'WPA2', 5: 'WEP', 7: 'Открытая', 8: 'WPA/WPA2' };
-	return map[enc] || 'Unknown';
-}
-
-function parseWiFiPacket(view) {
-	let offset = 0;
-	const count = view.getUint8(offset++);
-	const tbody = document.getElementById('wifi-list');
-	tbody.innerHTML = '';
-
-	const buffer = view.buffer;
-	const baseOffset = view.byteOffset;
-
-	for (let i = 0; i < count; i++) {
-		const mac = Array.from(new Uint8Array(buffer, baseOffset + offset, 6))
-			.map(b => b.toString(16).padStart(2, '0')).join(':');
-		offset += 6;
-		const chan = view.getUint8(offset++);
-		const enc = view.getUint8(offset++);
-		const rssi = view.getInt8(offset++);
-		const ssidLen = view.getUint8(offset++);
-		const ssid = new TextDecoder().decode(new Uint8Array(buffer, baseOffset + offset, ssidLen));
-		offset += ssidLen;
-
-		const tr = document.createElement('tr');
-		//tr.className = 'wifi-row';
-
-		const signalPercent = Math.min(100, Math.max(0, (rssi + 100) * 1.4));
-
-		tr.innerHTML = `
-            <td class="ps-3">${ssid || '<em>Скрыта</em>'}</td>
-            <td class="small text-muted">${mac}</td>
-            <td><small>${getAuthName(enc)}</small></td>
-            <td class="pe-3" title="${rssi}dbm">
-                <div class="d-flex align-items-center">
-                    <span class="badge bg-secondary me-2">CH ${chan}</span>
-                    <div class="progress flex-grow-1" style="height:6px; min-width:60px">
-                        <div class="progress-bar ${rssi > -65 ? 'bg-success' : 'bg-warning'}" style="width:${signalPercent}%">
-                        </div>
-                    </div>
-                </div>
-            </td>`;
-		tbody.appendChild(tr);
-	}
-}
-
-
-// --- ВИЗУАЛИЗАЦИЯ ---
-
-function renderSatBars(sats) {
 	const chart = document.getElementById('sat-chart');
 	chart.innerHTML = sats.map(s => {
 		let color = 'bg-danger';
@@ -282,6 +243,51 @@ function renderSatBars(sats) {
             </div>
         </div>`;
 	}).join('');
+}
+
+function parseWiFiPacket(packet) {
+	const tbody = document.getElementById('wifi-list');
+	tbody.innerHTML = '';  // Cleanup table
+
+	let offset = 1; // Skip packet type
+	const decoder = new TextDecoder();
+
+	while (offset < packet.byteLength) {
+		const macArray = new Uint8Array(packet.buffer, packet.byteOffset + offset, 6);
+		const mac = Array.from(macArray)
+			.map(b => b.toString(16).padStart(2, '0'))
+			.join(':').toUpperCase();
+		offset += 6;
+
+		const rssi = packet.getInt8(offset++);
+		const chan = packet.getUint8(offset++);
+		const enc = packet.getUint8(offset++);
+		const ssidLen = packet.getUint8(offset++);
+
+		const ssidArray = new Uint8Array(packet.buffer, packet.byteOffset + offset, ssidLen);
+		const ssid = decoder.decode(ssidArray);
+		offset += ssidLen;
+
+		// Signal -30 .. -90 dbm to 0..100%
+		const signalPercent = Math.min(100, Math.max(0, Math.round((rssi + 90) * (100 / 60))));
+		const tr = document.createElement('tr');
+
+		tr.innerHTML = `
+			<td class="ps-3">${ssid || '<em>&lt;Hidden&gt;</em>'}</td>
+			<td class="small text-muted">${mac}</td>
+			<td><small>${getAuthName(enc)}</small></td>
+			<td class="pe-3" title="${rssi} dBm">
+				<div class="d-flex align-items-center">
+					<span class="badge bg-secondary me-2">CH ${chan}</span>
+					<div class="progress flex-grow-1" style="height:6px; min-width:60px">
+						<div class="progress-bar ${rssi > -65 ? 'bg-success' : 'bg-warning'}" 
+								style="width:${signalPercent}%">
+						</div>
+					</div>
+				</div>
+			</td>`;
+		tbody.appendChild(tr);
+	}
 }
 
 // --- НАСТРОЙКИ И ФАЙЛЫ ---

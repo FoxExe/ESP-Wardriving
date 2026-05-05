@@ -2,9 +2,6 @@
 
 #include <Arduino.h>
 
-
-#define Y2K_OFFSET 946684800UL
-
 #pragma pack(push, 1)
 struct GPSSatellite {
 	uint8_t id;

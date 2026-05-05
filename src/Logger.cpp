@@ -48,7 +48,7 @@ bool Logger::begin() {
 			latestBlockAddr = addr;
 			break;
 		}
-		else if (bh.timestamp >= MIN_VALID_TS && bh.timestamp > maxTs) {
+		else if (bh.timestamp >= Y2K_OFFSET && bh.timestamp > maxTs) {
 			maxTs = bh.timestamp;
 			latestBlockAddr = addr;
 		}
@@ -73,7 +73,7 @@ bool Logger::begin() {
 			GPS_Position_Info tempGps;
 			flashReadStruct(_flash, _currentBlockAddr + _ptrTop, tempGps);
 
-			if (tempGps.timestamp < MIN_VALID_TS || tempGps.timestamp == 0xFFFFFFFF) break;
+			if (tempGps.timestamp < Y2K_OFFSET || tempGps.timestamp == 0xFFFFFFFF) break;
 
 			_ptrTop += sizeof(GPS_Position_Info) + (tempGps.signals * sizeof(AP_Signal_Record));
 		}

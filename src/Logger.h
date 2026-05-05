@@ -6,9 +6,8 @@
 #define SPI_CS_PIN            CS  // 15, but we can use GPIO-16
 #define DATA_BLOCK_SIZE       (64 * 1024) // !DO NOT CHANGE! (Or change all "_flash.eraseBlock64K()" in code!)
 #define BLOCK_HEADER_MAGIC    0xDDCC
-#define NEOGPS_TS_OFFSET      946684800UL
-#define MIN_VALID_TS          NEOGPS_TS_OFFSET // 01.01.2000
 #define MAX_CACHED_APS        1024  // (6 + 2) * 1024 = 8KB Ram.
+#define Y2K_OFFSET            946684800UL
 
 #pragma pack(push, 1)
 struct BlockHeader {

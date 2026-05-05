@@ -5,9 +5,12 @@
 #define FONT_H 8
 
 
-
-GUI::GUI() {
+void GUI::begin() {
 	_screen.init();
+
+	// Fix stupid software i2c
+	Wire.setClock(400000);
+	Wire.setClockStretchLimit(15000);
 }
 
 void GUI::_draw_graph(int x, int y, int h, int v_min, int v_max, uint8_t bar_w, int* items, uint8_t count, bool* flags) {
@@ -104,7 +107,6 @@ void GUI::draw_progressbar(int x, int y, int w, int h, int val, int val_min, int
 	}
 }
 
-
 void GUI::draw_loading(const char* msg) {
 #ifdef SERIAL_DEBUG
 	Serial1.println(msg); // Debug
@@ -131,13 +133,11 @@ void GUI::draw_time(tm* ptm) {
 	else {
 		draw_textf(0, 0, 1, 8, "%02d:%02d:%02d", ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
 	}
-	_screen.update();
 }
 
 void GUI::draw_points(unsigned int points) {
 	// logger.pointsSaved()
 	draw_textf(52, 0, 1, 7, "%7d", points);
-	_screen.update();
 }
 
 void GUI::draw_battery(unsigned int charge) {
@@ -150,7 +150,6 @@ void GUI::draw_battery(unsigned int charge) {
 	// Draw text
 	_screen.setCursorXY(104, 0);
 	_screen.printf("%3d%%", charge);
-	_screen.update();
 }
 
 void GUI::draw_isrunning_icon(bool flag) {
@@ -167,18 +166,15 @@ void GUI::draw_isrunning_icon(bool flag) {
 		_screen.rect(60, 9, 61, 13, OLED_FILL);
 		_screen.rect(63, 9, 64, 13, OLED_FILL);
 	}
-	_screen.update();
 }
 
 void GUI::draw_accuracy(unsigned int acc) {
 	draw_textf(54, 16, 1, 3, "%3d", (acc > 999) ? 999 : acc);
-	_screen.update();
 }
 
 void GUI::draw_flash_used(unsigned int percent) {
 	// (logger.getUsagePercentage() >= 100) ? 99 : logger.getUsagePercentage()
 	draw_textf(54, 24, 1, 3, "%2d%%", percent);
-	_screen.update();
 }
 
 void GUI::draw_wifi_status(int8_t status) {
@@ -206,11 +202,9 @@ void GUI::draw_wifi_status(int8_t status) {
 void GUI::draw_graph_gps(int* values, bool* is_used, unsigned int count) {
 	_screen.rect(0, 8, 47, 31, OLED_CLEAR);
 	_draw_graph(0, 8, 23, 0, 99, 2, values, count > MAX_BARS_2PX ? MAX_BARS_2PX : count, is_used);
-	_screen.update();
 }
 
 void GUI::draw_graph_wifi(int* values) {
 	_screen.rect(78, 8, 127, 31, OLED_CLEAR);
 	_draw_graph(78, 8, 23, -100, -40, 2, values, MAX_WIFI_CHANNELS);
-	_screen.update();
 }
